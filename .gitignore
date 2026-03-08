@@ -1,0 +1,28 @@
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Logs and outputs
+logs/
+*.json
+!config/*.json
+!versions/**/*.json
+
+# Agent local state
+.DS_Store
+
+# Editor caching
+.vscode/
+.idea/
+*.swp
+*.swo

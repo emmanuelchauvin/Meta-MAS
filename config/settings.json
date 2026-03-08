@@ -1,0 +1,32 @@
+{
+    "simulation": {
+        "max_generations": 50,
+        "initial_budget": 4000,
+        "meta_evo_interval": 5,
+        "_comments": {
+            "max_generations": "Nombre total de cycles d'évolution avant arrêt.",
+            "initial_budget": "Budget de départ en 'crédits' (tokens/temps).",
+            "meta_evo_interval": "Fréquence (en générations) des tentatives d'auto-amélioration du code."
+        }
+    },
+    "fitness": {
+        "time_penalty_factor": 0.005,
+        "token_penalty_factor": 0.0001,
+        "success_threshold": 0.95,
+        "_comments": {
+            "time_penalty_factor": "Poids de la pénalité de temps (1.0s = -0.005 fitness).",
+            "token_penalty_factor": "Poids de la pénalité de verbosité (1000 tok = -0.1 fitness).",
+            "success_threshold": "Score de fitness à atteindre pour considérer la mission comme réussie."
+        }
+    },
+    "swarm": {
+        "min_agents": 2,
+        "max_agents": 20,
+        "stagnation_threshold": 3,
+        "_comments": {
+            "min_agents": "Nombre minimum d'agents lancés par génération.",
+            "max_agents": "Nombre maximum d'agents lancés par génération.",
+            "stagnation_threshold": "Nombre de générations sans progrès avant de déclencher une méta-mutation des traits."
+        }
+    }
+}
