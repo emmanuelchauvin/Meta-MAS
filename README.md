@@ -25,6 +25,12 @@ Le projet a atteint des jalons critiques dans son autonomie :
 5. **Diagnostic de Précision** :
    Intégration d'un mode `verbose` dans l'évaluation, permettant de voir la réussite ou l'échec pour chaque question individuelle du benchmark, facilitant la compréhension des goulots d'étranglement de raisonnement.
 
+6. **Configuration Centrale (`settings.json`)** :
+   Le comportement global du Meta-MAS est entièrement paramétrable sans modifier le code, via le fichier `config/settings.json`. Ce fichier définit les "lois de la physique" du système évolutif :
+   - **`simulation`** : Définit la durée (`max_generations`), le `budget` total alloué à l'Essaim, et la fréquence de Méta-Évolution (`meta_evo_interval`).
+   - **`fitness`** : Contrôle brutalement la difficulté de la tâche ("Hard Mode"). `time_penalty_factor` et `token_penalty_factor` permettent de sanctionner les agents trop bavards ou trop lents, forçant le darwinisme à privilégier l'efficience temporelle et le coût en tokens.
+   - **`swarm`** : Limites de population d'agents (`min_agents`/`max_agents`) alloués dynamiquement selon la tendance, et seuil de `stagnation`.
+
 ## Architecture Modulaire
 
 - `core/` : Cœur du système.
