@@ -1,4 +1,5 @@
 import re
+from utils.logger import log
 
 
 class LogicEnvironment:
@@ -15,23 +16,33 @@ class LogicEnvironment:
         "Q3": "200",   # Bénéfice total
         "Q4": "7",     # Nombres premiers entre 40 et 70
         "Q5": "62",    # Cases restantes sur l'échiquier
+        "Q6": "3",     # Problème des nénuphars
+        "Q7": "13",    # Problème de la suite
+        "Q8": "120",   # Problème de vitesse moyenne
+        "Q9": "5",     # Problème des machines
+        "Q10": "41",   # Problème d'âge
+        "Q11": "24",   # Combinatoire
+        "Q12": "30",   # Géométrie
+        "Q13": "100",  # Pourcentages successifs
+        "Q14": "14",   # Logique jours ouvrables
+        "Q15": "8"     # Gouttes d'eau
     }
 
     def __init__(self, fitness_settings: dict = None):
         # Default settings if none provided
         self.settings = fitness_settings or {
-            "time_penalty_factor": 0.001,
-            "token_penalty_factor": 0.00002,
+            "time_penalty_factor": 0.0001,
+            "token_penalty_factor": 0.0005,
             "success_threshold": 0.95
         }
 
     def get_benchmark_task(self) -> str:
         """
-        Retourne un benchmark de 5 problèmes de difficulté croissante.
+        Retourne un benchmark de 15 problèmes de difficulté croissante.
         Chaque problème nécessite plusieurs étapes de raisonnement.
         """
         return (
-            "Résous les 5 problèmes suivants. Pour chaque question, donne UNIQUEMENT le nombre final "
+            "Résous les 15 problèmes suivants. Pour chaque question, donne UNIQUEMENT le nombre final "
             "au format 'Q1: [nombre]', 'Q2: [nombre]', etc. Aucune explanation.\n\n"
 
             "Q1: Un train part de la Gare A à 8h00 à 160 km/h vers la Gare B. "
@@ -49,6 +60,36 @@ class LogicEnvironment:
 
             "Q5: Un échiquier standard fait 8×8 = 64 cases. "
             "On retire les 2 coins diagonalement opposés. Combien de cases reste-t-il ?\n\n"
+
+            "Q6: Dans un lac, il y a des nénuphars. Chaque jour, la surface couverte par les nénuphars double. "
+            "S'il faut 4 jours pour que le lac soit entièrement couvert, combien de jours faut-il pour qu'il soit à moitié couvert ?\n\n"
+
+            "Q7: Quelle est la valeur du terme suivant dans cette suite : 1, 1, 2, 3, 5, 8, ... ?\n\n"
+
+            "Q8: Si je parcours la première moitié d'un trajet à 60 km/h, à quelle vitesse constante (en km/h) dois-je effectuer "
+            "la seconde moitié pour que ma vitesse moyenne sur tout le trajet soit de 80 km/h ?\n\n"
+
+            "Q9: S'il faut 5 minutes à 5 machines pour fabriquer 5 objets, "
+            "combien de minutes faudrait-il à 100 machines pour fabriquer 100 objets ?\n\n"
+
+            "Q10: Un père a 45 ans et son fils a 13 ans. Dans combien d'années l'âge du père sera-t-il exactement le double de celui du fils ? "
+            "Donne l'âge du père à ce moment-là.\n\n"
+
+            "Q11: Combien de mots différents de 4 lettres peut-on former avec les lettres A, B, C et D sans les répéter ?\n\n"
+
+            "Q12: Un rectangle a une aire de 50 cm² et sa longueur est le double de sa largeur. "
+            "Quel est son périmètre (en cm) ?\n\n"
+
+            "Q13: Un article coûte 100€. Son prix augmente d'abord de 25%, puis diminue de 20%. "
+            "Quel est le nouveau prix de l'article (en euros) ?\n\n"
+
+            "Q14: Une tâche nécessite 10 jours ouvrables pour être complétée. "
+            "Si la tâche commence un mercredi, combien de jours complets se seront écoulés (incluant les week-ends) "
+            "lorsque la tâche sera terminée à la fin du dernier jour ouvrable ?\n\n"
+
+            "Q15: Un robinet fuit et remplit un seau de 10 litres en 24 heures. "
+            "Sachant qu'il tombe exactement 2 gouttes par seconde, combien faut-il de gouttes pour faire 1 litre ? "
+            "Réponds en divisant le résultat total par 2160 (pour un chiffre court).\n\n"
         )
 
     async def evaluate(self, agent_response: dict | None, verbose: bool = False) -> float:
@@ -63,8 +104,8 @@ class LogicEnvironment:
         time_spent = agent_response.get("time", 0.0)
         tokens_used = agent_response.get("tokens", 0)
 
-        # Strip <think>...</think> blocks if present
-        cleaned = re.sub(r"<think>.*?</think>", "", result_text, flags=re.DOTALL).strip()
+        # Strip  blocks if present
+        cleaned = re.sub(r"", "", result_text, flags=re.DOTALL).strip()
 
 
         # Score logique : vérification stricte par question
@@ -82,10 +123,10 @@ class LogicEnvironment:
                 # Show what the agent actually answered
                 agent_match = re.search(rf"{q_label}\s*:\s*(\S+)", cleaned)
                 agent_answer = agent_match.group(1) if agent_match else "?"
-                print(f"    {status} {q_label}: attendu={expected}, reçu={agent_answer}")
+                log(f"    {status} {q_label}: attendu={expected}, reçu={agent_answer}", category="EVAL")
 
-        # Pénalités économiques (ajustées pour 5 questions)
-        time_penalty = time_spent * self.settings.get("time_penalty_factor", 0.015)
+        # Pénalités économiques (cohérentes avec __init__)
+        time_penalty = time_spent * self.settings.get("time_penalty_factor", 0.0001)
         token_penalty = tokens_used * self.settings.get("token_penalty_factor", 0.0005)
 
         fitness = score_logique - time_penalty - token_penalty

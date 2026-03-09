@@ -1,5 +1,7 @@
+import asyncio
 from openai import AsyncOpenAI
 from typing import List, Dict, Any
+from utils.logger import log
 
 class LLMService:
     def __init__(self, api_key: str = None, base_url: str = None):
@@ -11,11 +13,25 @@ class LLMService:
 
     async def generate_response(self, model: str, messages: List[Dict[str, Any]], **kwargs) -> str | None:
         """
-        Simple asynchronous method to generate a response from the LLM.
+        Asynchronous method to generate a response from the LLM with retry logic.
         """
-        response = await self.client.chat.completions.create(
-            model=model,
-            messages=messages,
-            **kwargs
-        )
-        return response.choices[0].message.content
+        max_retries = 3
+        base_delay = 2
+
+        for attempt in range(max_retries):
+            try:
+                response = await self.client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    **kwargs
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                log(f"Erreur appel API (tentative {attempt+1}/{max_retries}): {e}", category="LLM-RETRY")
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
+                    log(f"Nouvelle tentative dans {delay} secondes...", category="LLM-RETRY")
+                    await asyncio.sleep(delay)
+                else:
+                    log(f"Échec définitif après {max_retries} tentatives.", category="ERROR")
+                    return None

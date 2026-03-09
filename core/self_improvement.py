@@ -11,11 +11,12 @@ from datetime import datetime
 
 from services.llm_client import LLMService
 from core.memory import EvolutionGraph
+from utils.logger import log
 
 class SelfImprovementManager:
     def __init__(self, llm_service: LLMService):
         self.llm_service = llm_service
-        self.base_dir = Path("g:/devs/Antigravity/Meta-MAS")
+        self.base_dir = Path(__file__).parent.parent
         self.core_dir = self.base_dir / "core"
         # The temporary sandbox used for mutations
         self.sandbox_dir = self.base_dir / "versions" / "v_next"
@@ -65,35 +66,35 @@ class SelfImprovementManager:
         with open(report_path, "w", encoding="utf-8") as f:
             f.write(report)
 
-        print(f"[Self-Improvement] Rapport de mise à jour sauvegardé : {report_path.name}")
-        print(f"--- Rapport V{self.version} ---")
-        print(report)
-        print(f"--- Fin du Rapport ---")
+        log(f"Rapport de mise à jour sauvegardé : {report_path.name}", category="Self-Improvement")
+        log(f"--- Rapport V{self.version} ---", category="Self-Improvement")
+        log(report, category="Self-Improvement")
+        log(f"--- Fin du Rapport ---", category="Self-Improvement")
 
     async def reflect_on_architecture(self) -> str | None:
         """
         Analyse les fichiers sources (meta_mas et environment) et propose une unique modification.
         """
-        print("\n[Self-Improvement] Initialisation de l'Essaim d'Architectes pour Méta-Réflexion...")
+        log("Initialisation de l'Essaim d'Architectes pour Méta-Réflexion...", category="Self-Improvement")
         
         # Read the files to reflect upon
         try:
             with open(self.core_dir / "meta_mas.py", "r", encoding="utf-8") as f:
                 meta_mas_code = f.read()
-            with open(self.core_dir / "environment.py", "r", encoding="utf-8") as f:
+            with open(self.core_dir / "agent.py", "r", encoding="utf-8") as f:
                 env_code = f.read()
         except FileNotFoundError as e:
-            print(f"[Self-Improvement] Erreur de lecture des sources : {e}")
+            log(f"Erreur de lecture des sources : {e}", category="ERROR")
             return None
 
         system_prompt = (
             "Tu es l'Essaim Architecte du projet Meta-MAS. Ton but est d'améliorer le code source de ton propre système.\n"
             "Tu dois proposer UNE ET UNE SEULE modification claire et précise du code.\n"
-            "PRIVILÉGIE une modification SIMPLE de logique ou d'hyperparamètre (ex: changer une constante, ajuster un coefficient de pénalité) pour garantir la stabilité.\n"
+            "PRIVILÉGIE une modification SIMPLE d'algorithmique ou d'optimisation locale (ex: gestion des appels, prompt system) pour garantir la stabilité. NE TOUCHE PAS à la logique d'évaluation externe.\n"
             "Ne fournis QUE ta proposition explicative brève, pas de code complet."
         )
         
-        user_prompt = f"Voici le code de core/meta_mas.py :\n```python\n{meta_mas_code}\n```\n\nVoici le code de core/environment.py :\n```python\n{env_code}\n```\n\nQuelle modification proposes-tu ?"
+        user_prompt = f"Voici le code de core/meta_mas.py :\n```python\n{meta_mas_code}\n```\n\nVoici le code de core/agent.py :\n```python\n{env_code}\n```\n\nQuelle modification proposes-tu ?"
         
         messages = [
             {"role": "system", "content": system_prompt},
@@ -103,10 +104,10 @@ class SelfImprovementManager:
         response = await self.llm_service.generate_response(model="MiniMax-M2.5", messages=messages, temperature=0.8)
         
         if response:
-            print(f"[Self-Improvement] Proposition retenue : {response.strip()[:200]}...")
+            log(f"Proposition retenue : {response.strip()[:200]}...", category="Self-Improvement")
             return response.strip()
         else:
-            print("[Self-Improvement] L'Essaim n'a rien proposé.")
+            log("L'Essaim n'a rien proposé.", category="Self-Improvement")
             return None
 
     async def sandbox_code(self, proposed_modification: str) -> bool:
@@ -114,7 +115,7 @@ class SelfImprovementManager:
         Copie les fichiers actuels dans le bac à sable et demande au LLM d'y appliquer la modification.
         Inclut une validation syntaxique et un mécanisme de retry.
         """
-        print("[Self-Improvement] Copie des sources dans la sandbox v_next...")
+        log("Copie des sources dans la sandbox v_next...", category="Self-Improvement")
         
         # Nettoyage de v_next s'il existe déjà
         if self.sandbox_dir.exists():
@@ -125,7 +126,7 @@ class SelfImprovementManager:
         shutil.copytree(self.core_dir, self.sandbox_dir / "core")
         
         # Lire les fichiers sources
-        with open(self.sandbox_dir / "core" / "environment.py", "r", encoding="utf-8") as f:
+        with open(self.sandbox_dir / "core" / "agent.py", "r", encoding="utf-8") as f:
              env_code = f.read()
              
         with open(self.sandbox_dir / "core" / "meta_mas.py", "r", encoding="utf-8") as f:
@@ -141,7 +142,7 @@ class SelfImprovementManager:
         )
         user_prompt = (
             f"Proposition de modification :\n{proposed_modification}\n\n"
-            f"--- environment.py ---\n{env_code}\n\n"
+            f"--- agent.py ---\n{env_code}\n\n"
             f"--- meta_mas.py ---\n{meta_code}\n\n"
             f"Applique la modification au fichier concerné et renvoie LE FICHIER COMPLET modifié."
         )
@@ -153,7 +154,7 @@ class SelfImprovementManager:
         
         max_attempts = 2
         for attempt in range(max_attempts):
-            print(f"[Self-Improvement] Mutation du code en cours par le LLM (tentative {attempt+1}/{max_attempts})...")
+            log(f"Mutation du code en cours par le LLM (tentative {attempt+1}/{max_attempts}) (RETRY if > 1)...", category="Self-Improvement")
             response = await self.llm_service.generate_response(model="MiniMax-M2.5", messages=messages, temperature=0.1 + attempt * 0.1)
             
             if not response:
@@ -163,14 +164,14 @@ class SelfImprovementManager:
             modified_code = self._extract_code(response)
             
             if not modified_code:
-                print("[Self-Improvement] Impossible d'extraire du code valide de la réponse.")
+                log("Impossible d'extraire du code valide de la réponse.", category="Self-Improvement")
                 continue
             
             # --- VALIDATION SYNTAXIQUE ---
             try:
                 compile(modified_code, "<sandbox>", "exec")
             except SyntaxError as e:
-                print(f"[Self-Improvement] ❌ Code rejeté (SyntaxError ligne {e.lineno}): {e.msg}")
+                log(f"❌ Code rejeté (SyntaxError ligne {e.lineno}): {e.msg} (RETRY queued)", category="Self-Improvement")
                 # Ajouter le retour d'erreur au prochain essai
                 messages.append({"role": "assistant", "content": response})
                 messages.append({"role": "user", "content": 
@@ -180,20 +181,20 @@ class SelfImprovementManager:
                 continue
             
             # --- DÉTERMINER LE FICHIER CIBLE ---
-            target_file = self.sandbox_dir / "core" / "environment.py"
-            if "MetaMAS" in modified_code and "LogicEnvironment" not in modified_code:
+            target_file = self.sandbox_dir / "core" / "agent.py"
+            if "MetaMAS" in modified_code and "BaseAgent" not in modified_code:
                 target_file = self.sandbox_dir / "core" / "meta_mas.py"
                 
             with open(target_file, "w", encoding="utf-8") as f:
                 f.write(modified_code)
                 
-            print(f"[Self-Improvement] ✅ Fichier {target_file.name} muté dans la sandbox (syntaxe validée).")
+            log(f"✅ Fichier {target_file.name} muté dans la sandbox (syntaxe validée).", category="Self-Improvement")
             return True
         
-        print("[Self-Improvement] ❌ Échec du sandboxing après toutes les tentatives.")
+        log("❌ Échec du sandboxing après toutes les tentatives.", category="ERROR")
         # Nettoyage
         if self.sandbox_dir.exists():
-            shutil.rmtree(self.sandbox_dir)
+            shutil.rmtree(self.sandbox_dir, ignore_errors=True)
         return False
 
     def _extract_code(self, response: str) -> str | None:
@@ -225,7 +226,7 @@ class SelfImprovementManager:
         Lance meta_mas avec le code original et meta_mas avec le code sandboxé.
         Returns metrics dict.
         """
-        print("[Tournoi] Début du tournoi A/B entre V_Current et V_Next...")
+        log("Début du tournoi A/B entre V_Current et V_Next...", category="Tournoi")
         
         # To truly test v_next, we need a wrapper script that forces python to load modules from v_next instead of core.
         # This is complex in Python without modifying sys.path fundamentally in a sub-process.
@@ -315,7 +316,7 @@ if __name__ == "__main__":
             v_cur_fit, v_cur_time, v_cur_tokens = map(float, v_current_output.split(","))
             results["v_current"] = {"fitness": v_cur_fit, "time": v_cur_time, "tokens": int(v_cur_tokens)}
         except Exception as e:
-            print(f"[Tournoi] Erreur lors de l'exécution de V_Current: {e}")
+            log(f"Erreur lors de l'exécution de V_Current: {e}", category="ERROR")
             results["v_current"] = {"fitness": 0.0, "time": 999.0, "tokens": 9999}
             
         try:
@@ -329,9 +330,9 @@ if __name__ == "__main__":
             results["v_next"] = {"fitness": v_next_fit, "time": v_next_time, "tokens": int(v_next_tokens)}
         except Exception as e:
             # Likely SyntaxError or timeout because LLM broke the code
-            print(f"[Tournoi] V_Next a crashé ou échoué à converger : {e}")
+            log(f"V_Next a crashé ou échoué à converger : {e}", category="Tournoi")
             if 'cp_next' in locals():
-                print(f"[Tournoi] V_Next Stderr: {cp_next.stderr.strip()}")
+                log(f"V_Next Stderr: {cp_next.stderr.strip()}", category="Tournoi")
             results["v_next"] = {"fitness": 0.0, "time": 999.0, "tokens": 9999}
             
         # Clean up launchers
@@ -347,13 +348,16 @@ if __name__ == "__main__":
         v_cur = results.get("v_current", {"fitness": 0.0})
         v_next = results.get("v_next", {"fitness": 0.0})
         
-        print(f"[Tournoi] V1 Score: {v_cur['fitness']*100:.0f}%. V2 Score: {v_next['fitness']*100:.0f}%")
+        log(f"V1 Score: {v_cur['fitness']*100:.0f}%. V2 Score: {v_next['fitness']*100:.0f}%", category="Tournoi")
         
-        # Condition de victoire : Fitness strictement supérieure
-        if v_next["fitness"] > v_cur["fitness"] and v_next["fitness"] > 0:
+        # Ensure the baseline (v_cur) did not crash (indicated by time == 999.0 or fitness 0.0)
+        baseline_crashed = v_cur["time"] >= 999.0 or (v_cur["fitness"] <= 0.0 and v_cur["tokens"] >= 9999)
+        
+        # Condition de victoire : Fitness strictement supérieure ET la baseline n'a pas planté
+        if v_next["fitness"] > v_cur["fitness"] and v_next["fitness"] > 0 and not baseline_crashed:
             self.version += 1
             self._save_version()
-            print(f"[Tournoi] V2 Score: {v_next['fitness']*100:.0f}%. Remplacement des fichiers sources. Meta-MAS passe en version {self.version}.")
+            log(f"V2 Score: {v_next['fitness']*100:.0f}%. Remplacement des fichiers sources. Meta-MAS passe en version {self.version}.", category="Tournoi")
             # Remplacement
             for file in (self.sandbox_dir / "core").iterdir():
                 if file.is_file() and file.name.endswith(".py"):
@@ -363,12 +367,12 @@ if __name__ == "__main__":
             self._generate_report(modification, results)
             
             # Nettoyage
-            shutil.rmtree(self.sandbox_dir)
+            shutil.rmtree(self.sandbox_dir, ignore_errors=True)
             return True
         else:
-            print("[Tournoi] Déploiement annulé. Rollback effectué vers V1.")
+            log("Déploiement annulé. Rollback effectué vers V1.", category="Tournoi")
             # Rollback
-            shutil.rmtree(self.sandbox_dir)
+            shutil.rmtree(self.sandbox_dir, ignore_errors=True)
             return False
 
     async def run_meta_evolution_cycle(self):

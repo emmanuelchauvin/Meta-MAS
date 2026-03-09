@@ -10,6 +10,7 @@ from core.agent import BaseAgent
 from core.environment import LogicEnvironment
 from services.llm_client import LLMService
 from core.memory import EvolutionGraph
+from utils.logger import log
 
 
 class MetaMAS:
@@ -61,12 +62,12 @@ class MetaMAS:
 
         # Sécurité budget critique
         if self.budget < self.base_cost:
-            print("  ⚠️ [Meta-MAS] Budget critique. Mode survie : 1 agent.")
+            log("Budget critique. Mode survie : 1 agent.", category="WARNING")
             dynamic_count = 1
 
         trend_label = "📈 Progrès" if trend_factor < 1 else "📉 Stagnation" if trend_factor > 1 else "➡️ Stable"
-        print(f"  [Meta-MAS] Budget: {self.budget:.0f} ({budget_ratio*100:.0f}%) | "
-              f"Tendance: {trend_label} | Agents: {dynamic_count}")
+        log(f"Budget: {self.budget:.0f} ({budget_ratio*100:.0f}%) | "
+              f"Tendance: {trend_label} | Agents: {dynamic_count}", category="Meta-MAS")
 
         agents = []
         for _ in range(dynamic_count):
@@ -114,7 +115,7 @@ class MetaMAS:
                 
             if not self.memory.is_regression(new_role_prompt):
                 break
-            print(f"[Meta-MAS] Tentative {attempt+1}/{max_retries} rejetée : régression détectée.")
+            log(f"Tentative de mutation {attempt+1}/{max_retries} rejetée : régression détectée (RETRY).", category="Meta-MAS")
 
             
         new_dna = replace(
@@ -159,7 +160,7 @@ class MetaMAS:
             
         # If we have 3 scores and they haven't improved (all equal to the first one)
         if len(self.best_scores_history) == 3 and all(s <= self.best_scores_history[0] for s in self.best_scores_history):
-            print("[Meta-MAS] Stagnation détectée sur 3 générations ! Déclenchement de la Méta-Mutation...")
+            log("Stagnation détectée sur 3 générations ! Déclenchement de la Méta-Mutation...", category="Meta-MAS")
             await self.meta_mutation()
             self.best_scores_history.clear()
             
@@ -172,7 +173,7 @@ class MetaMAS:
             return current_dna
             
         # If no one succeeded, we mutate the DNA to create the next generation
-        print(f"[Meta-MAS] Meilleur score: {best_score:.3f}. Mutation en cours de l'ADN...")
+        log(f"Meilleur score: {best_score:.3f}. Mutation en cours de l'ADN...", category="Meta-MAS")
         new_dna = await self.mutate_dna(current_dna)
         return new_dna
 
@@ -223,11 +224,11 @@ class MetaMAS:
                     with open(self.identity_path, "w", encoding="utf-8") as f:
                         json.dump(data, f, indent=4, ensure_ascii=False)
                         
-                    print(f"  [Meta-MAS] *** MÉTA-MUTATION ! Nouveaux traits adoptés : {new_traits} ***")
+                    log(f"*** MÉTA-MUTATION ! Nouveaux traits adoptés : {new_traits} ***", category="Meta-MAS")
                     self._load_identity()  # Reload
                     return
             except json.JSONDecodeError as e:
-                print(f"  [Meta-MAS] Échec de la méta-mutation (parse error) : {e}")
+                log(f"Échec de la méta-mutation (parse error) : {e}", category="ERROR")
                 
-        print("  [Meta-MAS] La méta-mutation n'a pas produit de changement valide.")
+        log("La méta-mutation n'a pas produit de changement valide.", category="Meta-MAS")
 

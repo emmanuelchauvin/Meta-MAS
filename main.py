@@ -18,6 +18,7 @@ from core.agent import BaseAgent
 from core.executor import run_generation
 from core.environment import LogicEnvironment
 from core.self_improvement import SelfImprovementManager
+from utils.logger import log
 
 async def main():
     load_dotenv(override=True)
@@ -53,37 +54,37 @@ async def main():
     current_generation = 1
     meta_evo_interval = sim_settings.get("meta_evo_interval", 5)
     
-    print(f"\n{'='*60}")
-    print(f"  META-MAS v{meta_manager.version} — Système d'Auto-Conception")
-    print(f"{'='*60}")
-    print(f"  Mission  : {meta_mas.mission}")
-    print(f"  Budget   : {meta_mas.budget:.0f}")
-    print(f"  Générations max : {max_generations}")
-    print(f"  Méta-Évolution toutes les {meta_evo_interval} générations")
-    print(f"{'='*60}\n")
+    log(f"{'='*60}", category="SYSTEM")
+    log(f"  META-MAS v{meta_manager.version} — Système d'Auto-Conception", category="SYSTEM")
+    log(f"{'='*60}", category="SYSTEM")
+    log(f"  Mission  : {meta_mas.mission}", category="INFO")
+    log(f"  Budget   : {meta_mas.budget:.0f}", category="INFO")
+    log(f"  Générations max : {max_generations}", category="INFO")
+    log(f"  Méta-Évolution toutes les {meta_evo_interval} générations", category="INFO")
+    log(f"{'='*60}", category="SYSTEM")
     
     while current_generation <= max_generations:
         # --- EN-TÊTE DE GÉNÉRATION ---
-        print(f"\n{'─'*50}")
-        print(f"  Génération {current_generation}/{max_generations} | "
-              f"Budget: {meta_mas.budget:.1f} | Version: {meta_manager.version}")
-        print(f"{'─'*50}")
-        print(f"  Prompt : {base_dna.role_prompt[:80]}...")
+        log(f"{'─'*50}", category="GEN")
+        log(f"  Génération {current_generation}/{max_generations} | "
+              f"Budget: {meta_mas.budget:.1f} | Version: {meta_manager.version}", category="GEN")
+        log(f"{'─'*50}", category="GEN")
+        log(f"  Prompt : {base_dna.role_prompt[:80]}...", category="DNA")
         
         # --- MÉTA-ÉVOLUTION PÉRIODIQUE ---
         if current_generation > 1 and current_generation % meta_evo_interval == 0:
-            print(f"\n  🧬 [Orchestrateur] Cycle de Méta-Évolution (Gen {current_generation})...")
+            log(f"🧬 [Orchestrateur] Cycle de Méta-Évolution (Gen {current_generation})...", category="META")
             await meta_manager.run_meta_evolution_cycle()
-            print(f"  🔄 [Orchestrateur] Reprise de l'évolution classique.\n")
+            log(f"🔄 [Orchestrateur] Reprise de l'évolution classique.", category="META")
 
         # --- CHECK BANQUEROUTE ---
         if meta_mas.budget < meta_mas.base_cost and meta_mas.budget < 1.0:
-            print("  💀 [Meta-MAS] Banqueroute de l'essaim. Arrêt de l'évolution.")
+            log("💀 [Meta-MAS] Banqueroute de l'essaim. Arrêt de l'évolution.", category="STOP")
             break
             
         # --- SPAWN & EXÉCUTION ---
         agents = meta_mas.spawn_generation(base_dna=base_dna, count=5)
-        print(f"  🚀 Lancement de {len(agents)} agents...")
+        log(f"🚀 Lancement de {len(agents)} agents...", category="SWARM")
         results = await run_generation(agents, task)
         
         # --- ÉVALUATION PAR AGENT ---
@@ -99,15 +100,15 @@ async def main():
                     best_fit = fit
                     best_res = res_dict
                 status = "✅" if fit > 0.5 else "⚠️" if fit > 0 else "❌"
-                print(f"  {status} [{short_uid}] Fitness: {fit:.3f} "
-                      f"(⏱ {res_dict['time']:.1f}s | 🔤 {res_dict['tokens']} tok)")
+                log(f"{status} [{short_uid}] Fitness: {fit:.3f} "
+                      f"(⏱ {res_dict['time']:.1f}s | 🔤 {res_dict['tokens']} tok)", category="AGENT")
             else:
                 fitnesses.append(0.0)
-                print(f"  💥 [{short_uid}] Échec d'exécution")
+                log(f"💥 [{short_uid}] Échec d'exécution", category="ERROR")
         
         # Diagnostic du meilleur agent
         if best_res:
-            print(f"  🔍 Détail du meilleur agent :")
+            log("🔍 Détail du meilleur agent :", category="DEBUG")
             await env.evaluate(best_res, verbose=True)
         
         # --- RÉSUMÉ DE GÉNÉRATION ---
@@ -115,15 +116,15 @@ async def main():
             best = max(fitnesses)
             worst = min(fitnesses)
             avg = sum(fitnesses) / len(fitnesses)
-            print(f"\n  📊 Résumé Gen {current_generation} : "
-                  f"Best={best:.3f} | Avg={avg:.3f} | Worst={worst:.3f}")
+            log(f"📊 Résumé Gen {current_generation} : "
+                  f"Best={best:.3f} | Avg={avg:.3f} | Worst={worst:.3f}", category="GEN-SUM")
             
         # --- ÉVOLUTION ---
         next_dna = await meta_mas.evolve(results, base_dna)
         
         if next_dna.generation == base_dna.generation:
             # Si evolve() a redonné le même ADN, c'est que l'IA a refusé ou été bloquée
-            print(f"\n  ⚠️ [Meta-MAS] Mutation bloquée ou refusée à la génération {current_generation}. Retrait d'agents pour forcer le changement...")
+            log(f"⚠️ [Meta-MAS] Mutation bloquée ou refusée à la génération {current_generation}. Retrait d'agents pour forcer le changement...", category="WARNING")
             # On force tout de même le compteur de génération pour ne pas boucler indéfiniment
             current_generation += 1
             meta_mas.budget -= 50  # Pénalité de budget pour blocage
@@ -134,13 +135,13 @@ async def main():
 
     # --- FIN ---
     if current_generation > max_generations and meta_mas.budget >= 1.0:
-        print(f"\n  ⏰ [Meta-MAS] Limite de {max_generations} générations atteinte.")
+        log(f"⏰ [Meta-MAS] Limite de {max_generations} générations atteinte.", category="STOP")
 
     meta_mas.memory.save_graph("logs/evolution_graph.json")
     
-    print(f"\n{'='*60}")
-    print(f"  FIN — Budget restant : {meta_mas.budget:.1f} | Version finale : {meta_manager.version}")
-    print(f"{'='*60}\n")
+    log(f"{'='*60}", category="SYSTEM")
+    log(f"FIN — Budget restant : {meta_mas.budget:.1f} | Version finale : {meta_manager.version}", category="SYSTEM")
+    log(f"{'='*60}", category="SYSTEM")
 
 if __name__ == "__main__":
     asyncio.run(main())
