@@ -80,8 +80,11 @@ class MetaMAS:
     async def mutate_dna(self, dna: AgentDNA) -> AgentDNA:
         system_prompt = (
             "Tu es l'Architecte Primordial. Analyse ce prompt d'agent qui a échoué "
-            "à une tâche logique. Produis une version améliorée, plus rigoureuse et concise "
-            "de ce prompt pour maximiser les chances de réussite."
+            "à une tâche logique comportant 15 problèmes distincts.\n"
+            "MISSION : Produis une version améliorée, plus rigoureuse et concise "
+            "de ce prompt pour maximiser les chances de réussite.\n"
+            "RÈGLE CRITIQUE : Ton nouveau prompt DOIT explicitement mentionner qu'il y a 15 PROBLÈMES à résoudre (Q1 à Q15) "
+            "et qu'il faut répondre au format exact 'Qx: [nombre]'."
         )
         base_user_prompt = f"Voici le prompt actuel qui a échoué (Fitness = 0.0) :\n{dna.role_prompt}\n\nGénère uniquement le nouveau prompt, sans aucune introduction, conclusion ou balise de code."
 

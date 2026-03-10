@@ -16,8 +16,8 @@ Le projet a atteint des jalons critiques dans son autonomie :
 2. **Auto-Amélioration Architecturale (Tournoi A/B)** : 
    Toutes les 5 générations, un "Essaim d'Architectes" analyse le code source et propose des modifications. Ces modifications sont testées dans un environnement isolé (Sandbox). Si la version `V_Next` surpasse `V_Current` lors d'un tournoi réel, le code source original est écrasé. **Le système s'est déjà auto-mis à jour vers la v2 pour corriger ses propres bugs.**
 
-3. **Validation Syntaxique et Robustesse** : 
-   L'application de code généré par LLM inclut désormais une validation syntaxique (`compile()`) et un mécanisme de **retry par feedback**. Si le LLM produit une erreur de syntaxe, le système lui renvoie l'erreur pour auto-correction immédiate.
+3. **Validation Syntaxique et Sémantique (Robustesse)** : 
+   L'application de code généré par LLM inclut désormais une validation syntaxique (`compile()`) complète, vérifiant les erreurs. S'ajoute à cela une **validation sémantique** stricte (vérification de la présence des définitions des classes obligatoires comme `BaseAgent` ou `MetaMAS`). Si le LLM produit une erreur de syntaxe ou ampute un fichier de moitié, le système lui renvoie l'erreur pour auto-correction immédiate avec un mécanisme de **retry par feedback**.
 
 4. **Mémoire et Anti-Régression** :
    Utilisation de `NetworkX` pour maintenir un graphe d'évolution (`EvolutionGraph`). Le système compare chaque nouvelle mutation aux échecs passés via `difflib` pour bloquer les régressions avant même l'appel API.

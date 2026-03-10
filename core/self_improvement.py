@@ -11,6 +11,7 @@ from datetime import datetime
 
 from services.llm_client import LLMService
 from core.memory import EvolutionGraph
+from models.dna import AgentDNA
 from utils.logger import log
 
 class SelfImprovementManager:
@@ -133,18 +134,21 @@ class SelfImprovementManager:
             meta_code = f.read()
             
         system_prompt = (
-            "Tu es un Développeur Expert Python.\n"
-            "RÈGLES STRICTES :\n"
-            "1. Renvoie UNIQUEMENT du code Python brut, PAS de markdown, PAS de commentaires explicatifs avant/après.\n"
-            "2. Le code doit être syntaxiquement VALIDE. Attention aux chaînes multi-lignes et regex.\n"
-            "3. Renvoie le fichier COMPLET (tous les imports, classes et méthodes) avec la modification appliquée.\n"
-            "4. NE MODIFIE QUE le fichier concerné par la proposition. Ne mélange pas le contenu des deux fichiers."
+            "Tu es un Développeur Expert Python chez Meta-MAS.\n"
+            "TA MISSION : Appliquer la modification demandée et renvoyer le contenu du fichier MIS À JOUR.\n"
+            "RÈGLES CRITIQUES :\n"
+            "1. Renvoie le code Python COMPLET dans un bloc de code markdown (ex: ```python ... ```).\n"
+            "2. Le code doit être TOTALEMENT EXÉCUTABLE et AUTO-SUFFISANT. Inclus TOUS les imports du fichier original.\n"
+            "3. NE TRONQUE JAMAIS le code. Remplis les méthodes entières, pas de '# ... reste du code'.\n"
+            "4. Vérifie les parenthèses, les guillemets et l'indentation.\n"
+            "5. Un SEUL fichier par réponse."
         )
         user_prompt = (
-            f"Proposition de modification :\n{proposed_modification}\n\n"
-            f"--- agent.py ---\n{env_code}\n\n"
-            f"--- meta_mas.py ---\n{meta_code}\n\n"
-            f"Applique la modification au fichier concerné et renvoie LE FICHIER COMPLET modifié."
+            f"PROPOSITION DE MODIFICATION :\n{proposed_modification}\n\n"
+            f"--- CONTENU ACTUEL DE agent.py ---\n{env_code}\n\n"
+            f"--- CONTENU ACTUEL DE meta_mas.py ---\n{meta_code}\n\n"
+            f"Choisis le fichier à modifier basé sur la proposition. "
+            f"Applique la modification et renvoie le contenu ENTIER ET EXTREMEMENT PROPRE du fichier modifié (code pur).\n"
         )
         
         messages = [
@@ -155,7 +159,12 @@ class SelfImprovementManager:
         max_attempts = 2
         for attempt in range(max_attempts):
             log(f"Mutation du code en cours par le LLM (tentative {attempt+1}/{max_attempts}) (RETRY if > 1)...", category="Self-Improvement")
-            response = await self.llm_service.generate_response(model="MiniMax-M2.5", messages=messages, temperature=0.1 + attempt * 0.1)
+            response = await self.llm_service.generate_response(
+                model="MiniMax-M2.5", 
+                messages=messages, 
+                temperature=0.1 + attempt * 0.1,
+                max_tokens=8192
+            )
             
             if not response:
                 continue
@@ -181,9 +190,20 @@ class SelfImprovementManager:
                 continue
             
             # --- DÉTERMINER LE FICHIER CIBLE ---
-            target_file = self.sandbox_dir / "core" / "agent.py"
-            if "MetaMAS" in modified_code and "BaseAgent" not in modified_code:
+            if "class MetaMAS" in modified_code:
                 target_file = self.sandbox_dir / "core" / "meta_mas.py"
+            else:
+                target_file = self.sandbox_dir / "core" / "agent.py"
+                # Validation sémantique pour éviter un import error
+                if "class BaseAgent" not in modified_code:
+                    log("❌ Code rejeté: 'class BaseAgent' introuvable dans la mutation. (RETRY queued)", category="Self-Improvement")
+                    messages.append({"role": "assistant", "content": response})
+                    messages.append({"role": "user", "content": 
+                        "ERREUR : Ton code ne contient pas 'class BaseAgent'. Tu as tronqué le fichier ou supprimé la classe principale. "
+                        "Tu DOIS renvoyer le contenu COMPLET et avec la classe `BaseAgent`. "
+                        "Corrige ça et renvoie le code complet."
+                    })
+                    continue
                 
             with open(target_file, "w", encoding="utf-8") as f:
                 f.write(modified_code)
@@ -198,39 +218,36 @@ class SelfImprovementManager:
         return False
 
     def _extract_code(self, response: str) -> str | None:
-        """Extrait le code Python d'une réponse LLM, en nettoyant le bruit."""
+        """Extrait le code Python d'une réponse LLM, en privilégiant la structure complète."""
+        if not response:
+            return None
+
         # 1. Strip <think> blocks
         cleaned = re.sub(r"<think>.*?</think>", "", response, flags=re.DOTALL).strip()
         
         # 2. Try to extract from markdown code blocks
-        code_blocks = re.findall(r"```python\s*(.*?)\s*```", cleaned, re.DOTALL)
-        if not code_blocks:
-            code_blocks = re.findall(r"```\s*(.*?)\s*```", cleaned, re.DOTALL)
-        
+        code_blocks = re.findall(r"```(?:[pP]ython)?\s*\n(.*?)(?:```|$)", cleaned, re.DOTALL)
+            
         if code_blocks:
-            return max(code_blocks, key=len).strip()
-        
-        # 3. Fallback: find first Python-like line
-        match = re.search(r"^(import |from |class |def )", cleaned, re.MULTILINE)
-        if match:
-            return cleaned[match.start():].strip()
-        
-        # 4. Last resort: return cleaned text if it looks like code
-        if "def " in cleaned or "class " in cleaned or "import " in cleaned:
-            return cleaned
-        
+            code = max(code_blocks, key=len).strip()
+            code = re.sub(r"\\\s*\n", "\\\n", code)
+            return code
+            
+        # 3. Fallback: Check if the whole string looks like python code
+        if "import " in cleaned or "class " in cleaned or "def " in cleaned:
+             return cleaned
+
         return None
 
-    def run_tournament(self) -> dict:
+    async def run_tournament(self, best_dna: AgentDNA | None = None) -> dict:
         """
-        Lance meta_mas avec le code original et meta_mas avec le code sandboxé.
-        Returns metrics dict.
+        Lance meta_mas avec le code original et meta_mas avec le code sandboxé de manière asynchrone.
         """
         log("Début du tournoi A/B entre V_Current et V_Next...", category="Tournoi")
         
-        # To truly test v_next, we need a wrapper script that forces python to load modules from v_next instead of core.
-        # This is complex in Python without modifying sys.path fundamentally in a sub-process.
-        # We will create a temporary launcher in the sandbox.
+        # Fallback DNA if not provided
+        role_prompt = best_dna.role_prompt if best_dna else "Tu es un assistant logique. Résous ces équations calmement."
+        temp = best_dna.temperature if best_dna else 0.3
         
         launcher_code = f"""
 import sys
@@ -239,10 +256,10 @@ import time
 import re
 from pathlib import Path
 from dataclasses import replace
+import uuid
 
 # Force the import of the sandboxed core module
 sys.path.insert(0, str(Path(r"{self.sandbox_dir.absolute()}")))
-# Also include base dir for models etc
 sys.path.append(str(Path(r"{self.base_dir.absolute()}")))
 
 from core.environment import LogicEnvironment
@@ -250,25 +267,23 @@ from core.executor import run_generation
 from core.agent import BaseAgent
 from models.dna import AgentDNA
 from services.llm_client import LLMService
-
 from dotenv import load_dotenv
-import uuid
 
 async def run_benchmark():
     try:
         load_dotenv(override=True)
         llm = LLMService()
-        task = LogicEnvironment().get_benchmark_task()
         env = LogicEnvironment()
+        task = env.get_benchmark_task()
         
-        # We don't need full evolution, just run 1 generation of 5 agents and see their fitness.
         base_dna = AgentDNA(
             uid=uuid.uuid4(), 
             generation=1, 
-            role_prompt="Tu es un assistant logique. Résous ces équations calmement.", 
-            temperature=0.3
+            role_prompt={repr(role_prompt)}, 
+            temperature={temp}
         )
         
+        # 3 agents en parallèle pour robustesse
         agents = [BaseAgent(dna=replace(base_dna, uid=uuid.uuid4()), llm_service=llm) for _ in range(3)]
         
         start_time = time.perf_counter()
@@ -287,7 +302,6 @@ async def run_benchmark():
                 total_fitness += fit
                 
         avg_fitness = total_fitness / 3.0 if valid_results > 0 else 0.0
-        
         print(f"{{avg_fitness}},{{end_time - start_time}},{{total_tokens}}")
     except Exception as e:
         sys.stderr.write(f"Launcher Error: {{str(e)}}\\n")
@@ -299,43 +313,58 @@ if __name__ == "__main__":
         with open(self.sandbox_dir / "launcher.py", "w", encoding="utf-8") as f:
             f.write(launcher_code)
             
-        # We also need a standard launcher for V_Current
         with open(self.base_dir / "launcher_current.py", "w", encoding="utf-8") as f:
-            # Same code but WITHOUT modifying sys.path to point to sandbox
             f.write(launcher_code.replace(f'sys.path.insert(0, str(Path(r"{self.sandbox_dir.absolute()}")))', ''))
 
         results = {}
+        timeout_val = 300
         
+        # Helper pour lancer un processus asynchrone
+        async def run_proc(cmd, cwd):
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=cwd
+            )
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout_val)
+                return stdout.decode(errors="replace").strip(), stderr.decode(errors="replace").strip(), proc.returncode
+            except asyncio.TimeoutError:
+                try:
+                    proc.kill()
+                except:
+                    pass
+                return "", "Timeout", 1
+
         try:
             # RUN V_CURRENT
-            cp_current = subprocess.run(
-                [sys.executable, str(self.base_dir / "launcher_current.py")],
-                capture_output=True, text=True, timeout=120, cwd=self.base_dir
-            )
-            v_current_output = cp_current.stdout.strip()
-            v_cur_fit, v_cur_time, v_cur_tokens = map(float, v_current_output.split(","))
-            results["v_current"] = {"fitness": v_cur_fit, "time": v_cur_time, "tokens": int(v_cur_tokens)}
+            stdout, stderr, returncode = await run_proc([sys.executable, str(self.base_dir / "launcher_current.py")], self.base_dir)
+            lines = [l.strip() for l in stdout.split("\n") if "," in l]
+            if returncode == 0 and lines:
+                v_cur_fit, v_cur_time, v_cur_tokens = map(float, lines[-1].split(","))
+                results["v_current"] = {"fitness": v_cur_fit, "time": v_cur_time, "tokens": int(v_cur_tokens)}
+            else:
+                log(f"V1 Stderr: {stderr}", category="Tournoi")
+                raise ValueError(f"V1 output Error: {stderr[:200]}")
         except Exception as e:
-            log(f"Erreur lors de l'exécution de V_Current: {e}", category="ERROR")
+            log(f"Erreur V_Current: {e}", category="ERROR")
             results["v_current"] = {"fitness": 0.0, "time": 999.0, "tokens": 9999}
             
         try:
             # RUN V_NEXT
-            cp_next = subprocess.run(
-                [sys.executable, str(self.sandbox_dir / "launcher.py")],
-                capture_output=True, text=True, timeout=120, cwd=self.sandbox_dir
-            )
-            v_next_output = cp_next.stdout.strip()
-            v_next_fit, v_next_time, v_next_tokens = map(float, v_next_output.split(","))
-            results["v_next"] = {"fitness": v_next_fit, "time": v_next_time, "tokens": int(v_next_tokens)}
+            stdout, stderr, returncode = await run_proc([sys.executable, str(self.sandbox_dir / "launcher.py")], self.sandbox_dir)
+            lines = [l.strip() for l in stdout.split("\n") if "," in l]
+            if returncode == 0 and lines:
+                v_next_fit, v_next_time, v_next_tokens = map(float, lines[-1].split(","))
+                results["v_next"] = {"fitness": v_next_fit, "time": v_next_time, "tokens": int(v_next_tokens)}
+            else:
+                log(f"V2 Stderr: {stderr}", category="Tournoi")
+                raise ValueError(f"V2 output Error: {stderr[:200]}")
         except Exception as e:
-            # Likely SyntaxError or timeout because LLM broke the code
-            log(f"V_Next a crashé ou échoué à converger : {e}", category="Tournoi")
-            if 'cp_next' in locals():
-                log(f"V_Next Stderr: {cp_next.stderr.strip()}", category="Tournoi")
+            log(f"V_Next crash ou timeout : {e}", category="Tournoi")
             results["v_next"] = {"fitness": 0.0, "time": 999.0, "tokens": 9999}
             
-        # Clean up launchers
         if (self.base_dir / "launcher_current.py").exists():
             (self.base_dir / "launcher_current.py").unlink()
             
@@ -375,7 +404,7 @@ if __name__ == "__main__":
             shutil.rmtree(self.sandbox_dir, ignore_errors=True)
             return False
 
-    async def run_meta_evolution_cycle(self):
+    async def run_meta_evolution_cycle(self, current_dna: AgentDNA | None = None):
         modification = await self.reflect_on_architecture()
         if not modification:
             return
@@ -384,5 +413,5 @@ if __name__ == "__main__":
         if not success:
             return
             
-        tournament_results = self.run_tournament()
+        tournament_results = await self.run_tournament(best_dna=current_dna)
         self.deploy_or_rollback(tournament_results, modification=modification)

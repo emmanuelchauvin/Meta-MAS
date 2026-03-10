@@ -10,7 +10,7 @@
         }
     },
     "fitness": {
-        "time_penalty_factor": 0.005,
+        "time_penalty_factor": 0.002,
         "token_penalty_factor": 0.0001,
         "success_threshold": 0.95,
         "_comments": {

@@ -73,8 +73,7 @@ async def main():
         
         # --- MÉTA-ÉVOLUTION PÉRIODIQUE ---
         if current_generation > 1 and current_generation % meta_evo_interval == 0:
-            log(f"🧬 [Orchestrateur] Cycle de Méta-Évolution (Gen {current_generation})...", category="META")
-            await meta_manager.run_meta_evolution_cycle()
+            await meta_manager.run_meta_evolution_cycle(current_dna=base_dna)
             log(f"🔄 [Orchestrateur] Reprise de l'évolution classique.", category="META")
 
         # --- CHECK BANQUEROUTE ---

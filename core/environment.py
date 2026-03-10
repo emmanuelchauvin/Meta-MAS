@@ -20,7 +20,7 @@ class LogicEnvironment:
         "Q7": "13",    # Problème de la suite
         "Q8": "120",   # Problème de vitesse moyenne
         "Q9": "5",     # Problème des machines
-        "Q10": "41",   # Problème d'âge
+        "Q10": "64",   # Problème d'âge : père aura 64 ans (45+19=64, fils 13+19=32)
         "Q11": "24",   # Combinatoire
         "Q12": "30",   # Géométrie
         "Q13": "100",  # Pourcentages successifs
@@ -104,8 +104,8 @@ class LogicEnvironment:
         time_spent = agent_response.get("time", 0.0)
         tokens_used = agent_response.get("tokens", 0)
 
-        # Strip  blocks if present
-        cleaned = re.sub(r"", "", result_text, flags=re.DOTALL).strip()
+        # Strip <think> blocks if present
+        cleaned = re.sub(r"<think>.*?</think>", "", result_text, flags=re.DOTALL).strip()
 
 
         # Score logique : vérification stricte par question
