@@ -109,11 +109,22 @@ class MetaMAS:
             )
             
             if response is not None:
-                # Strip <think>...</think> blocks from the response
-                cleaned = re.sub(r"<think>.*?</think>", "", response, flags=re.DOTALL).strip()
+                # Strip <think>...</think> blocks cleanly
+                cleaned = re.sub(r"^\s*<think>.*?</think>\s*(?:\n|$)", "", response, flags=re.DOTALL)
+                
+                # If LLM didn't close <think>, try to find end of think by looking for typical prompt start like "Tu " or "Vous "
+                if cleaned.strip().startswith("<think>"):
+                   match = re.search(r"\n\s*(Tu |Vous |Voici |Le )", cleaned)
+                   if match:
+                       cleaned = cleaned[match.start():]
+                   else:
+                       cleaned = re.sub(r"^\s*<think>\s*", "", cleaned)
+                
+                cleaned = cleaned.strip()
                 # Also strip markdown code fences if present
                 if cleaned.startswith("```"):
-                    cleaned = re.sub(r"```\w*\n?", "", cleaned).strip()
+                    cleaned = re.sub(r"```\w*\n?", "", cleaned)
+                    cleaned = re.sub(r"```$", "", cleaned.strip()).strip()
                 new_role_prompt = cleaned if cleaned else dna.role_prompt
                 
             if not self.memory.is_regression(new_role_prompt):
@@ -205,8 +216,19 @@ class MetaMAS:
         
         if response:
             try:
-                # Strip <think> blocks first
-                cleaned_response = re.sub(r"<think>.*?</think>", "", response, flags=re.DOTALL).strip()
+                # Strip <think> blocks cleanly
+                cleaned_response = re.sub(r"^\s*<think>.*?</think>\s*(?:\n|$)", "", response, flags=re.DOTALL)
+                
+                # If LLM didn't close <think>, just extract what looks like a JSON array.
+                # Find the first opening bracket that could be an array.
+                if cleaned_response.strip().startswith("<think>"):
+                   match = re.search(r"\[", cleaned_response)
+                   if match:
+                       cleaned_response = cleaned_response[match.start():]
+                   else:
+                       cleaned_response = re.sub(r"^\s*<think>\s*", "", cleaned_response)
+                
+                cleaned_response = cleaned_response.strip()
                 # Remove markdown code fences
                 cleaned_response = re.sub(r"```json\s*", "", cleaned_response)
                 cleaned_response = re.sub(r"```\s*", "", cleaned_response)

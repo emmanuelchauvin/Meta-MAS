@@ -1,7 +1,62 @@
+# Mise en cache de l'encodeur tiktoken pour optimiser les performances
+_tiktoken_encoder = None
+
 from models.dna import AgentDNA
 from services.llm_client import LLMService
 import re
 import asyncio
+
+def _clean_think_tags(response: str) -> str:
+    """
+    Nettoie récursivement les balises <think>...</think> de manière robuste.
+    Utilise un traitement itératif pour gérer les cas de balises malformées
+    ou imbriquées que le regex simple ne capturerait pas.
+    """
+    if not response:
+        return ""
+    
+    cleaned = response
+    max_iterations = 5  # Limite pour éviter les boucles infinies
+    
+    for _ in range(max_iterations):
+        # Premier passage : nettoyer les balises standard
+        prev = cleaned
+        cleaned = re.sub(r"<think>.*?</think>", "", prev, flags=re.DOTALL).strip()
+        
+        # Deuxième passage : nettoyer les balises malformées (sans fermeture)
+        cleaned = re.sub(r"<think>.*", "", cleaned, flags=re.DOTALL).strip()
+        cleaned = re.sub(r".*</think>", "", cleaned, flags=re.DOTALL).strip()
+        
+        # Arrêter si plus de changement (convergence)
+        if cleaned == prev:
+            break
+    
+    return cleaned
+
+
+def _estimate_tokens(text: str) -> int:
+    """
+    Estimation réaliste du nombre de tokens.
+    Utilise tiktoken si disponible pour plus de précision, sinon utilise
+    une approximation conservative (1 token ≈ 4 caractères) qui fonctionne
+    mieux pour les textes mixtes (code + prompts).
+    """
+    global _tiktoken_encoder
+    
+    if not text:
+        return 0
+    
+    try:
+        import tiktoken
+        # Mise en cache de l'encodeur pour éviter de le recharger à chaque appel
+        if _tiktoken_encoder is None:
+            _tiktoken_encoder = tiktoken.get_encoding("cl100k_base")
+        return len(_tiktoken_encoder.encode(text))
+    except ImportError:
+        # Fallback: approximation conservative pour textes mixtes
+        # 1 token ≈ 4 caractères est plus réaliste que 3 pour du code/prompts
+        return len(text) // 4
+
 
 class BaseAgent:
     def __init__(self, dna: AgentDNA, llm_service: LLMService):
@@ -32,12 +87,12 @@ class BaseAgent:
         except Exception as e:
             response = f"ERREUR : {str(e)}"
         
-        # Nettoyage systématique des balises <think> si le LLM en a généré
-        cleaned_response = re.sub(r"<think>.*?</think>", "", response or "", flags=re.DOTALL).strip()
+        # Nettoyage robuste des balises <think> via fonction dédiée
+        cleaned_response = _clean_think_tags(response)
         
         elapsed_time = time.perf_counter() - start_time
-        # Estimation basique des tokens: 1 token ~= 4 caractères
-        tokens = len(cleaned_response) // 4 if cleaned_response else 0
+        # Estimation réaliste des tokens (utilise tiktoken si disponible)
+        tokens = _estimate_tokens(cleaned_response)
         
         return {
             "result": cleaned_response,

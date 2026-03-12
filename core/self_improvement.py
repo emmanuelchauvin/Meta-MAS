@@ -180,7 +180,9 @@ class SelfImprovementManager:
             try:
                 compile(modified_code, "<sandbox>", "exec")
             except SyntaxError as e:
-                log(f"❌ Code rejeté (SyntaxError ligne {e.lineno}): {e.msg} (RETRY queued)", category="Self-Improvement")
+                with open(self.base_dir / "versions" / "reports" / "failed_mutation.py", "w", encoding="utf-8") as f:
+                    f.write(modified_code)
+                log(f"❌ Code rejeté (SyntaxError ligne {e.lineno}): {e.msg} (RETRY queued). Extracted code written to failed_mutation.py", category="Self-Improvement")
                 # Ajouter le retour d'erreur au prochain essai
                 messages.append({"role": "assistant", "content": response})
                 messages.append({"role": "user", "content": 
@@ -221,21 +223,35 @@ class SelfImprovementManager:
         """Extrait le code Python d'une réponse LLM, en privilégiant la structure complète."""
         if not response:
             return None
-
-        # 1. Strip <think> blocks
-        cleaned = re.sub(r"<think>.*?</think>", "", response, flags=re.DOTALL).strip()
         
-        # 2. Try to extract from markdown code blocks
-        code_blocks = re.findall(r"```(?:[pP]ython)?\s*\n(.*?)(?:```|$)", cleaned, re.DOTALL)
+        # 1. Try to extract from markdown code blocks first without stripping anything
+        code_blocks = re.findall(r"```(?:[pP]ython)?\s*\n(.*?)(?:```|$)", response, re.DOTALL)
             
         if code_blocks:
-            code = max(code_blocks, key=len).strip()
-            code = re.sub(r"\\\s*\n", "\\\n", code)
-            return code
+            # Sort by length and pick the longest
+            code_blocks.sort(key=len, reverse=True)
+            for code in code_blocks:
+                code_str = code.strip()
+                if "import " in code_str or "class " in code_str or "def " in code_str:
+                    return code_str
+            return code_blocks[0].strip()
             
-        # 3. Fallback: Check if the whole string looks like python code
+        # 2. Fallback: If no markdown blocks, try to strip the initial <think> block cleanly
+        # We require </think> to be followed by spaces and a newline to avoid matching `</think>` inside Python string literals.
+        cleaned = re.sub(r"^\s*<think>.*?</think>\s*(?:\n|$)", "", response, flags=re.DOTALL)
+        
+        # If the LLM forgot to output </think>, the <think> tag will still be at the beginning of `cleaned`.
+        if cleaned.strip().startswith("<think>"):
+            # We skip the reasoning text by finding the first standard Python preamble
+            match = re.search(r"^(?:import|from|class|def)\s+[a-zA-Z_]", cleaned, flags=re.MULTILINE)
+            if match:
+                cleaned = cleaned[match.start():]
+            else:
+                # Just remove the opening tag as a last resort
+                cleaned = re.sub(r"^\s*<think>\s*", "", cleaned)
+                
         if "import " in cleaned or "class " in cleaned or "def " in cleaned:
-             return cleaned
+             return cleaned.strip()
 
         return None
 

@@ -6,35 +6,36 @@ Meta-MAS est une architecture expérimentale de Système Multi-Agents (MAS) capa
 
 Dans un paradigme classique, les agents IA exécutent des tâches selon des prompts définis statiquement. **Meta-MAS** repense cette approche en dotant le système d'une **conscience d'orchestration**. Le système supervise une population de sous-agents qui tentent de résoudre des benchmarks complexes. À chaque itération, le Meta-MAS évalue les performances et fait évoluer soit les prompts (micro-évolution), soit son propre code source (méta-évolution).
 
-## Innovations Majeures (v2)
+## Innovations Majeures (v13)
 
-Le projet a atteint des jalons critiques dans son autonomie :
+Le projet a atteint des jalons critiques dans son autonomie et son efficacité :
 
-1. **Allocation Dynamique d'Agents** : 
-   La population d'agents n'est plus statique. Le système ajuste le nombre d'agents (de 1 à 10) en fonction du **budget restant** et de la **tendance de fitness** (stagnation → exploration accrue, progrès → économie).
+1. **Auto-Amélioration Architecturale Continue (Tournoi A/B)** : 
+   Toutes les 5 générations, un "Essaim d'Architectes" analyse le code source et propose des modifications. Ces modifications sont testées dans un environnement isolé (Sandbox). Si la version `V_Next` surpasse `V_Current` lors d'un tournoi réel, le code source original est écrasé. **Le système s'est déjà auto-mis à jour 13 fois pour corriger ses propres bugs et optimiser ses performances.**
 
-2. **Auto-Amélioration Architecturale (Tournoi A/B)** : 
-   Toutes les 5 générations, un "Essaim d'Architectes" analyse le code source et propose des modifications. Ces modifications sont testées dans un environnement isolé (Sandbox). Si la version `V_Next` surpasse `V_Current` lors d'un tournoi réel, le code source original est écrasé. **Le système s'est déjà auto-mis à jour vers la v2 pour corriger ses propres bugs.**
+2. **Benchmark de Raisonnement Avancé (15 Questions)** :
+   L'environnement d'évaluation a été musclé pour passer de 5 à **15 problèmes de logique et de mathématiques** (casse-têtes temporels, probabilités, géométrie). Cette complexité accrue force le système à développer des stratégies de prompt (Chain-of-Thought) plus sophistiquées.
 
-3. **Validation Syntaxique et Sémantique (Robustesse)** : 
-   L'application de code généré par LLM inclut désormais une validation syntaxique (`compile()`) complète, vérifiant les erreurs. S'ajoute à cela une **validation sémantique** stricte (vérification de la présence des définitions des classes obligatoires comme `BaseAgent` ou `MetaMAS`). Si le LLM produit une erreur de syntaxe ou ampute un fichier de moitié, le système lui renvoie l'erreur pour auto-correction immédiate avec un mécanisme de **retry par feedback**.
+3. **Optimisation des Performances (Caching Tiktoken)** :
+   Pour accélérer les cycles d'évaluation, le calcul des tokens utilise désormais une mise en cache globale de l'encodeur `tiktoken` (modèle `cl100k_base`), réduisant drastiquement le temps de chargement lors des mutations d'agents.
 
-4. **Mémoire et Anti-Régression** :
-   Utilisation de `NetworkX` pour maintenir un graphe d'évolution (`EvolutionGraph`). Le système compare chaque nouvelle mutation aux échecs passés via `difflib` pour bloquer les régressions avant même l'appel API.
+4. **Nettoyage Robuste des Pensées (Think Tags)** :
+   Un mécanisme de regex optimisé permet de purifier les réponses des agents des balises `<think>...</think>` générées par les modèles de type raisonnement (R1/O1), évitant que la "réflexion" interne ne pollue le format de réponse attendu.
 
-5. **Diagnostic de Précision** :
-   Intégration d'un mode `verbose` dans l'évaluation, permettant de voir la réussite ou l'échec pour chaque question individuelle du benchmark, facilitant la compréhension des goulots d'étranglement de raisonnement.
+5. **Validation Syntaxique et Sémantique (Robustesse)** : 
+   L'application de code généré par LLM inclut une validation syntaxique (`compile()`) complète. S'ajoute à cela une **validation sémantique** stricte. En cas d'erreur, le système déclenche un mécanisme de **retry par feedback** en renvoyant l'erreur au LLM.
 
-6. **Configuration Centrale (`settings.json`)** :
-   Le comportement global du Meta-MAS est entièrement paramétrable sans modifier le code, via le fichier `config/settings.json`. Ce fichier définit les "lois de la physique" du système évolutif :
-   - **`simulation`** : Définit la durée (`max_generations`), le `budget` total alloué à l'Essaim, et la fréquence de Méta-Évolution (`meta_evo_interval`).
-   - **`fitness`** : Contrôle brutalement la difficulté de la tâche ("Hard Mode"). `time_penalty_factor` et `token_penalty_factor` permettent de sanctionner les agents trop bavards ou trop lents, forçant le darwinisme à privilégier l'efficience temporelle et le coût en tokens.
-   - **`swarm`** : Limites de population d'agents (`min_agents`/`max_agents`) alloués dynamiquement selon la tendance, et seuil de `stagnation`.
+6. **Allocation Dynamique d'Agents** : 
+   La population d'agents s'ajuste dynamiquement (de 2 à 20) en fonction du **budget restant** et de la **tendance de fitness** (stagnation → exploration accrue, progrès → économie).
+
+7. **Configuration Centrale (`settings.json`)** :
+   Le comportement global est paramétrable via `config/settings.json`, définissant les "lois de la physique" du système : pénalités de temps/tokens, seuils de succès (0.95 fitness), et intervalles de méta-évolution.
 
 ## Architecture Modulaire
 
 - `core/` : Cœur du système.
   - `meta_mas.py` : L'Orchestrateur (gestion du budget, cycles d'évolution).
+  - `agent.py` : Définition des agents et leur logique d'exécution.
   - `self_improvement.py` : Gestionnaire de méta-évolution, sandbox et tournois.
   - `environment.py` : Benchmark logique et calculateur de fitness.
 - `versions/` : Historique des mises à jour architecturales et rapports de tournois.
@@ -50,4 +51,4 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Le système s'arrêtera automatiquement au succès (Fitness ≥ 0.95), à la fin des générations prévues (15+) ou par épuisement du budget.
+Le système s'arrêtera automatiquement au succès (Fitness ≥ 0.95), à la fin des générations prévues ou par épuisement du budget.
