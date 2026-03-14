@@ -1,3 +1,5 @@
+# core/agent.py
+
 # Mise en cache de l'encodeur tiktoken pour optimiser les performances
 _tiktoken_encoder = None
 
@@ -6,40 +8,40 @@ from services.llm_client import LLMService
 import re
 import asyncio
 
-def _clean_think_tags(response: str) -> str:
+
+def clean_think_tags(response: str) -> str:
     """
-    Nettoie récursivement les balises <think>...</think> de manière robuste.
-    Utilise un traitement itératif pour gérer les cas de balises malformées
-    ou imbriquées que le regex simple ne capturerait pas.
+    Nettoie les balises de réflexion de manière robuste.
+    Gère les blocs standard <think>...</think> et les balises MiniMax <|im_start|>think.
     """
     if not response:
         return ""
     
-    cleaned = response
-    max_iterations = 5  # Limite pour éviter les boucles infinies
+    # 1. Supprimer les blocs standard <think>...</think> (y compris mal fermés)
+    cleaned = re.sub(r"<think>.*?</think>", "", response, flags=re.DOTALL)
+    cleaned = re.sub(r"<think>.*", "", cleaned, flags=re.DOTALL)
     
-    for _ in range(max_iterations):
-        # Premier passage : nettoyer les balises standard
-        prev = cleaned
-        cleaned = re.sub(r"<think>.*?</think>", "", prev, flags=re.DOTALL).strip()
-        
-        # Deuxième passage : nettoyer les balises malformées (sans fermeture)
-        cleaned = re.sub(r"<think>.*", "", cleaned, flags=re.DOTALL).strip()
-        cleaned = re.sub(r".*</think>", "", cleaned, flags=re.DOTALL).strip()
-        
-        # Arrêter si plus de changement (convergence)
-        if cleaned == prev:
-            break
+    # 2. Supprimer les balises MiniMax <|im_start|>think et <|im_end|>
+    cleaned = re.sub(r"<\|im_start\|>think.*?<\|im_end\|>", "", cleaned, flags=re.DOTALL)
+    cleaned = re.sub(r"<\|im_start\|>think.*", "", cleaned, flags=re.DOTALL)
     
-    return cleaned
+    # 3. Supprimer les fermetures orphelines
+    cleaned = re.sub(r"</think>\s*", "", cleaned)
+    
+    return cleaned.strip()
 
 
-def _estimate_tokens(text: str) -> int:
+def estimate_tokens(text: str) -> int:
     """
     Estimation réaliste du nombre de tokens.
     Utilise tiktoken si disponible pour plus de précision, sinon utilise
-    une approximation conservative (1 token ≈ 4 caractères) qui fonctionne
-    mieux pour les textes mixtes (code + prompts).
+    une approximation hybride selon la longueur du texte.
+    
+    Args:
+        text: Le texte à estimer
+        
+    Returns:
+        Nombre estimé de tokens
     """
     global _tiktoken_encoder
     
@@ -53,9 +55,17 @@ def _estimate_tokens(text: str) -> int:
             _tiktoken_encoder = tiktoken.get_encoding("cl100k_base")
         return len(_tiktoken_encoder.encode(text))
     except ImportError:
-        # Fallback: approximation conservative pour textes mixtes
-        # 1 token ≈ 4 caractères est plus réaliste que 3 pour du code/prompts
-        return len(text) // 4
+        # Fallback: approximation hybride selon la longueur du texte
+        char_count = len(text)
+        if char_count < 20:
+            # Pour très courts textes: 1 token ≈ 2-3 caractères
+            return max(1, char_count // 3)
+        elif char_count < 100:
+            # Pour textes moyens: compromis
+            return char_count * 3 // 10
+        else:
+            # Pour longs textes: approximation conservative
+            return char_count // 4
 
 
 class BaseAgent:
@@ -87,12 +97,12 @@ class BaseAgent:
         except Exception as e:
             response = f"ERREUR : {str(e)}"
         
-        # Nettoyage robuste des balises <think> via fonction dédiée
-        cleaned_response = _clean_think_tags(response)
+        # Nettoyage robuste des balises de réflexion via fonction unifiée
+        cleaned_response = clean_think_tags(response)
         
         elapsed_time = time.perf_counter() - start_time
         # Estimation réaliste des tokens (utilise tiktoken si disponible)
-        tokens = _estimate_tokens(cleaned_response)
+        tokens = estimate_tokens(cleaned_response)
         
         return {
             "result": cleaned_response,
