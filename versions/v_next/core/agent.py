@@ -13,23 +13,43 @@ def clean_think_tags(response: str) -> str:
     """
     Nettoie les balises de réflexion de manière robuste et optimisée.
     Une seule passe de regex pour tous les cas.
+    
+    Gère:
+    - <|im_start|>think...<|im_end|> (MiniMax format)
+    -</think>...</think> (Standard)
+    - Fermetures orphelines sur nouvelle ligne
+    - Balises non fermées (tronque après marqueurs typiques de réponse)
     """
     if not response:
         return ""
     
-    # Une seule substitution globale avec alternation
-    # Capture: <think>...</think> standard, <|im_start|>think...<|im_end|>, et fermetures orphelines
+    # Patterns de base : balises bien formées et fermetures orphelines
     patterns = [
         r"<\|im_start\|>think.*?<\|im_end\|>",  # MiniMax format bien fermé
         r"<\|im_start\|>think.*",                 # MiniMax mal fermé
         r"<think>.*?</think>",                       # Standard bien fermé
         r"<think>.*",                            # Mal fermé (fin de chaîne)
-        r"\n</think>\s*"                             # Fermeture orpheline (CORRECTION: un seul \n)
+        r"\n\s*</think>\s*"                          # Fermeture orpheline sur nouvelle ligne
     ]
     
     cleaned = response
     for pattern in patterns:
         cleaned = re.sub(pattern, "", cleaned, flags=re.DOTALL)
+    
+    # Cas spécial : balise ouvrante non fermée - chercher marqueurs typiques de début de réponse
+    if cleaned.strip().startswith("<think>"):
+        # Marqueurs typiques indiquant le début de la réponse utile
+        markers = [r"\n\s*(Tu |Vous |Voici |Le |La |Les |Un |Une |Voici)", 
+                   r"\n\n", 
+                   r"^\s*(Tu |Vous |Voici |Le |La |Les )"]
+        for marker in markers:
+            match = re.search(marker, cleaned)
+            if match:
+                cleaned = cleaned[match.start():]
+                break
+        else:
+            # Pas de marqueur trouvé, supprimer simplement l'en-tête
+            cleaned = re.sub(r"^\s*<think>\s*", "", cleaned)
     
     return cleaned.strip()
 

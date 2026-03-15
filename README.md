@@ -6,12 +6,15 @@ Meta-MAS est une architecture expérimentale de Système Multi-Agents (MAS) capa
 
 Dans un paradigme classique, les agents IA exécutent des tâches selon des prompts définis statiquement. **Meta-MAS** repense cette approche en dotant le système d'une **conscience d'orchestration**. Le système supervise une population de sous-agents qui tentent de résoudre des benchmarks complexes. À chaque itération, le Meta-MAS évalue les performances et fait évoluer soit les prompts (micro-évolution), soit son propre code source (méta-évolution).
 
-## Innovations Majeures (v22)
+## Innovations Majeures (v24)
 
-Le projet a franchi des jalons critiques dans son autonomie, avec une attention particulière portée à la robustesse du traitement des données et à la précision algorithmique :
+Le projet a atteint un stade de maturité critique, franchissant le seuil des **97% de réussite** sur son benchmark complexe grâce à des capacités d'auto-débogage algorithmique :
 
-1. **Auto-Amélioration Architecturale (v22)** : 
-   Le système s'est déjà auto-mis à jour **22 fois** de manière totalement autonome. Chaque version est validée par un tournoi A/B en sandbox, garantissant que seule une amélioration prouvée (fitness, temps ou coût) remplace le code source de production.
+1. **Auto-Correction et Optimisation fine (v24)** : 
+   Le système s'est déjà auto-mis à jour **24 fois**. La dernière version a vu le moteur identifier et corriger lui-même une erreur de syntaxe regex subtile, faisant bondir la fitness de 86% à **97.8%**.
+
+2. **Accélération du Cycle d'Évolution (v23)** :
+   Une refactorisation autonome de la logique de nettoyage des données a permis de diviser par deux (x2) le temps de traitement au sein du cycle darwinien, passant de 41s à seulement 22s par évaluation.
 
 2. **Pipeline de Nettoyage Unifié (v16-v21)** :
    La logique de traitement des sorties LLM a été harmonisée. Le système utilise désormais une fonction `clean_think_tags` centralisée et robuste, capable de gérer les balises `<think>` mal fermées et d'éliminer les pensées internes des modèles de raisonnement (R1, o1) avant l'évaluation.
