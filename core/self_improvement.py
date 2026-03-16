@@ -63,7 +63,7 @@ class SelfImprovementManager:
             f"✅ **Déploiement validé.** La version {self.version} remplace la version {self.version - 1}.\n"
         )
 
-        report_path = self.reports_dir / f"v{self.version}_report.md"
+        report_path = self.reports_dir / f"reportMAX_v{self.version}.md"
         with open(report_path, "w", encoding="utf-8") as f:
             f.write(report)
 
