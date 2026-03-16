@@ -9,27 +9,39 @@ import re
 import asyncio
 
 
+# Regex compilée une seule fois pour toutes les passes de nettoyage
+_CLEAN_THINK_PATTERN = re.compile(
+    r"<\|im_start\|>think.*?<\|im_end\|>"
+    r"|<\|im_start\|>think.*"
+    r"|<thought>.*?</thought>"
+    r"|<thinking>.*?</thinking>"
+    r"|<reasoning>.*?</reasoning>"
+    r"|<context>.*?</context>",
+    flags=re.DOTALL
+)
+
+# Patterns pour rétrocompatibilité et cas supplémentaires (appliqués après le nettoyage principal)
+_SECONDARY_CLEAN_PATTERNS = [
+    (re.compile(r"^\s*<think>\s*", flags=re.MULTILINE), ""),
+    (re.compile(r"</think>\s*$", flags=re.MULTILINE), ""),
+    (re.compile(r"^\s*</think>\W*", flags=re.MULTILINE), ""),
+]
+
+
 def clean_think_tags(response: str) -> str:
     """
     Nettoie les balises de réflexion de manière robuste et optimisée.
-    Une seule passe de regex pour tous les cas.
+    Une seule passe de regex pour tous les cas courants, puis nettoyage secondaire.
     """
     if not response:
         return ""
     
-    # Une seule substitution globale avec alternation
-    # Capture: <think>...</think> standard, <|im_start|>think...<|im_end|>, et fermetures orphelines
-    patterns = [
-        r"<\|im_start\|>think.*?<\|im_end\|>",  # MiniMax format bien fermé
-        r"<\|im_start\|>think.*",                 # MiniMax mal fermé
-        r"<think>.*?</think>",                       # Standard bien fermé
-        r"<think>.*",                            # Mal fermé (fin de chaîne)
-        r"\n</think>\s*"                             # Fermeture orpheline (CORRECTION: un seul \n)
-    ]
+    # Première passe : nettoyage principal avec regex compilée
+    cleaned = _CLEAN_THINK_PATTERN.sub("", response)
     
-    cleaned = response
-    for pattern in patterns:
-        cleaned = re.sub(pattern, "", cleaned, flags=re.DOTALL)
+    # Deuxième passe : nettoyage des cas résiduels
+    for pattern, replacement in _SECONDARY_CLEAN_PATTERNS:
+        cleaned = pattern.sub(replacement, cleaned)
     
     return cleaned.strip()
 

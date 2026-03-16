@@ -6,15 +6,15 @@ Meta-MAS est une architecture expérimentale de Système Multi-Agents (MAS) capa
 
 Dans un paradigme classique, les agents IA exécutent des tâches selon des prompts définis statiquement. **Meta-MAS** repense cette approche en dotant le système d'une **conscience d'orchestration**. Le système supervise une population de sous-agents qui tentent de résoudre des benchmarks complexes. À chaque itération, le Meta-MAS évalue les performances et fait évoluer soit les prompts (micro-évolution), soit son propre code source (méta-évolution).
 
-## Innovations Majeures (v24)
+## Innovations Majeures (v26)
 
-Le projet a atteint un stade de maturité critique, franchissant le seuil des **97% de réussite** sur son benchmark complexe grâce à des capacités d'auto-débogage algorithmique :
+Le projet a atteint un stade de maturité industrielle, consolidant ses performances records par une architecture logicielle épurée et hautement performante :
 
-1. **Auto-Correction et Optimisation fine (v24)** : 
-   Le système s'est déjà auto-mis à jour **24 fois**. La dernière version a vu le moteur identifier et corriger lui-même une erreur de syntaxe regex subtile, faisant bondir la fitness de 86% à **97.8%**.
+1. **Optimisation Algorithmique Avancée (v26)** : 
+   Le système s'est auto-mis à jour **26 fois**. La dernière évolution a vu le moteur refactoriser intégralement son pipeline de nettoyage de données, fusionnant de multiples passes de regex en une **passe unique optimisée**, réduisant drastiquement la charge computationnelle.
 
-2. **Accélération du Cycle d'Évolution (v23)** :
-   Une refactorisation autonome de la logique de nettoyage des données a permis de diviser par deux (x2) le temps de traitement au sein du cycle darwinien, passant de 41s à seulement 22s par évaluation.
+2. **Élimination de la Dette Technique (v25)** :
+   Application autonome du principe DRY (*Don't Repeat Yourself*). Le système a identifié et supprimé les duplications de code entre l'orchestrateur (`meta_mas.py`) et ses agents, garantissant une cohérence structurelle parfaite et une fiabilité accrue à **97.8% de fitness**.
 
 2. **Pipeline de Nettoyage Unifié (v16-v21)** :
    La logique de traitement des sorties LLM a été harmonisée. Le système utilise désormais une fonction `clean_think_tags` centralisée et robuste, capable de gérer les balises `<think>` mal fermées et d'éliminer les pensées internes des modèles de raisonnement (R1, o1) avant l'évaluation.

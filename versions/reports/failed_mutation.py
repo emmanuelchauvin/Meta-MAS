@@ -1,5 +1,4 @@
 import json
-import re
 import uuid
 from dataclasses import replace
 from pathlib import Path
@@ -48,9 +47,9 @@ class MetaMAS:
         
         if len(self.best_scores_history) >= stagnation_limit:
             recent = self.best_scores_history[-stagnation_limit:]
-            if all(s < self.best_scores_history[0] for s in recent): # v2 fix already here
+            if all(s < self.best_scores_history[0] for s in recent):
                 trend_factor = 1.5        # +50% : explorer plus largement
-            else:                         # progrès
+            else:
                 trend_factor = 0.6        # -40% : économiser
 
         dynamic_count = int(count * budget_ratio * trend_factor)
@@ -97,7 +96,6 @@ class MetaMAS:
             if attempt > 0:
                 user_prompt += "\n\nATTENTION : Tes précédentes propositions étaient trop similaires à des approches ayant déjà échoué. Propose une approche RADICALEMENT DIFFÉRENTE."
                 
-            # We assume generate_response takes a list of messages
             messages = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
@@ -109,9 +107,8 @@ class MetaMAS:
             )
             
             if response is not None:
-                # Utilisation de la fonction unifiée de nettoyage des balises de réflexion
+                # Utilisation de la fonction centralisée de nettoyage
                 cleaned = clean_think_tags(response)
                 
-                cleaned = cleaned.strip()
-                # Also strip markdown code fences if present
+                # Nettoyage supplémentaire des balises markdown si présentes
                 if cleaned.startswith("
