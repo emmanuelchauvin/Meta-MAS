@@ -25,7 +25,17 @@ class LogicEnvironment:
         "Q12": "30",   # Géométrie
         "Q13": "100",  # Pourcentages successifs
         "Q14": "14",   # Logique jours ouvrables
-        "Q15": "8"     # Gouttes d'eau
+        "Q15": "8",     # Gouttes d'eau
+        "Q16": "15",    # Somme des chiffres
+        "Q17": "50",    # Probabilité pile-face (50%)
+        "Q18": "720",   # Factorielle de 6
+        "Q19": "25",    # Racines carrées
+        "Q20": "10",    # Escargot dans le puits (10 jours)
+        "Q21": "12",    # Douzaine de douzaines
+        "Q22": "121",   # Suite de carrés
+        "Q23": "48",    # Diviseurs de 48
+        "Q24": "1260",  # PPCM
+        "Q25": "180"    # Somme des angles d'un triangle
     }
 
     def __init__(self, fitness_settings: dict = None):
@@ -38,17 +48,16 @@ class LogicEnvironment:
 
     def get_benchmark_task(self) -> str:
         """
-        Retourne un benchmark de 15 problèmes de difficulté croissante.
+        Retourne un benchmark de 25 problèmes de difficulté croissante.
         Chaque problème nécessite plusieurs étapes de raisonnement.
         """
         return (
-            "Résous les 15 problèmes suivants. Pour chaque question, donne UNIQUEMENT le nombre final "
-            "au format 'Q1: [nombre]', 'Q2: [nombre]', etc. Aucune explanation.\n\n"
+            "Résous les 25 problèmes suivants. Pour chaque question, donne UNIQUEMENT le nombre final "
+            "au format 'Q1: [nombre]', 'Q2: [nombre]', etc. Aucune explication.\n\n"
 
             "Q1: Un train part de la Gare A à 8h00 à 160 km/h vers la Gare B. "
             "Un second train part de la Gare B (distante de 480 km) à 9h00 à 200 km/h vers la Gare A. "
-            "À quelle heure (heure entière arrondie à l'inférieur) se croisent-ils ? "
-            "Réponds uniquement le nombre de l'heure (ex: si 10h37, réponds 10).\n\n"
+            "À quelle heure (heure entière arrondie à l'inférieur) se croisent-ils ?\n\n"
 
             "Q2: Alice a 3 fois l'âge de Bob. Dans 12 ans, Alice aura exactement 2 fois l'âge de Bob. "
             "Quel est l'âge actuel de la mère de Bob, sachant qu'elle avait 25 ans quand Bob est né ?\n\n"
@@ -90,6 +99,27 @@ class LogicEnvironment:
             "Q15: Un robinet fuit et remplit un seau de 10 litres en 24 heures. "
             "Sachant qu'il tombe exactement 2 gouttes par seconde, combien faut-il de gouttes pour faire 1 litre ? "
             "Réponds en divisant le résultat total par 2160 (pour un chiffre court).\n\n"
+
+            "Q16: Quelle est la somme des chiffres du nombre 2 puissance 9 ?\n\n"
+
+            "Q17: Jean lance une pièce de monnaie équilibrée. Quelle est la probabilité (en pourcentage) d'obtenir face ?\n\n"
+
+            "Q18: Quelle est la valeur de 6 factorielle (6!) ?\n\n"
+
+            "Q19: Quel est le nombre dont le carré est 625 ?\n\n"
+
+            "Q20: Un escargot est au fond d'un puits de 12 mètres. Chaque jour, il monte de 3 mètres et chaque nuit, il redescend de 2 mètres. "
+            "Combien de jours lui faudra-t-il pour sortir du puits ?\n\n"
+
+            "Q21: Combien d'objets y a-t-il dans une douzaine de douzaines ?\n\n"
+
+            "Q22: Quel est le nombre suivant dans la suite : 1, 4, 9, 16, 25, 36, 49, 64, 81, 100, ... ?\n\n"
+
+            "Q23: Combien de diviseurs possède le nombre 48 ?\n\n"
+
+            "Q24: Quel est le plus petit commun multiple (PPCM) de 12, 15 et 21 ?\n\n"
+
+            "Q25: Quelle est la somme des angles intérieurs d'un triangle (en degrés) ?\n\n"
         )
 
     async def evaluate(self, agent_response: dict | None, verbose: bool = False) -> float:

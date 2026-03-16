@@ -74,28 +74,33 @@ class SelfImprovementManager:
 
     async def reflect_on_architecture(self) -> str | None:
         """
-        Analyse les fichiers sources (meta_mas et environment) et propose une unique modification.
+        Analyse TOUS les fichiers sources du dossier core/ et propose une unique modification.
         """
-        log("Initialisation de l'Essaim d'Architectes pour Méta-Réflexion...", category="Self-Improvement")
+        log("Initialisation de l'Essaim d'Architectes pour Méta-Réflexion Globale...", category="Self-Improvement")
         
-        # Read the files to reflect upon
+        # Read all files in core/ to provide full context
+        source_context = ""
         try:
-            with open(self.core_dir / "meta_mas.py", "r", encoding="utf-8") as f:
-                meta_mas_code = f.read()
-            with open(self.core_dir / "agent.py", "r", encoding="utf-8") as f:
-                env_code = f.read()
-        except FileNotFoundError as e:
+            for file_path in self.core_dir.glob("*.py"):
+                if file_path.name == "__init__.py":
+                    continue
+                with open(file_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                source_context += f"--- FICHIER : core/{file_path.name} ---\n```python\n{content}\n```\n\n"
+        except Exception as e:
             log(f"Erreur de lecture des sources : {e}", category="ERROR")
             return None
 
         system_prompt = (
             "Tu es l'Essaim Architecte du projet Meta-MAS. Ton but est d'améliorer le code source de ton propre système.\n"
-            "Tu dois proposer UNE ET UNE SEULE modification claire et précise du code.\n"
-            "PRIVILÉGIE une modification SIMPLE d'algorithmique ou d'optimisation locale (ex: gestion des appels, prompt system) pour garantir la stabilité. NE TOUCHE PAS à la logique d'évaluation externe.\n"
-            "Ne fournis QUE ta proposition explicative brève, pas de code complet."
+            "Tu as accès à l'intégralité du code source du cœur du système.\n"
+            "MISSION : Tu dois proposer UNE ET UNE SEULE modification claire et précise du code.\n"
+            "Tu peux modifier la logique d'évolution, la sandbox, l'orchestrateur ou les agents eux-mêmes.\n"
+            "PRIVILÉGIE une modification SIMPLE mais ayant un impact significatif sur la performance, la robustesse ou l'intelligence collective.\n"
+            "Ne fournis QUE ta proposition explicative brève (max 150 mots), pas de code complet."
         )
         
-        user_prompt = f"Voici le code de core/meta_mas.py :\n```python\n{meta_mas_code}\n```\n\nVoici le code de core/agent.py :\n```python\n{env_code}\n```\n\nQuelle modification proposes-tu ?"
+        user_prompt = f"Voici le contexte complet du système :\n\n{source_context}\nQuelle modification architecturale ou algorithmique proposes-tu ?"
         
         messages = [
             {"role": "system", "content": system_prompt},
@@ -191,27 +196,31 @@ class SelfImprovementManager:
                 })
                 continue
             
-            # --- DÉTERMINER LE FICHIER CIBLE ---
-            if "class MetaMAS" in modified_code:
-                target_file = self.sandbox_dir / "core" / "meta_mas.py"
-            else:
-                target_file = self.sandbox_dir / "core" / "agent.py"
-                # Validation sémantique pour éviter un import error
-                if "class BaseAgent" not in modified_code:
-                    log("❌ Code rejeté: 'class BaseAgent' introuvable dans la mutation. (RETRY queued)", category="Self-Improvement")
-                    messages.append({"role": "assistant", "content": response})
-                    messages.append({"role": "user", "content": 
-                        "ERREUR : Ton code ne contient pas 'class BaseAgent'. Tu as tronqué le fichier ou supprimé la classe principale. "
-                        "Tu DOIS renvoyer le contenu COMPLET et avec la classe `BaseAgent`. "
-                        "Corrige ça et renvoie le code complet."
-                    })
-                    continue
-                
-            with open(target_file, "w", encoding="utf-8") as f:
-                f.write(modified_code)
-                
-            log(f"✅ Fichier {target_file.name} muté dans la sandbox (syntaxe validée).", category="Self-Improvement")
-            return True
+                # --- DÉTERMINER LE FICHIER CIBLE DYNAMIQUEMENT ---
+                target_filename = None
+                if "class MetaMAS" in modified_code:
+                    target_filename = "meta_mas.py"
+                elif "class BaseAgent" in modified_code:
+                    target_filename = "agent.py"
+                elif "class LogicEnvironment" in modified_code:
+                    target_filename = "environment.py"
+                elif "class SelfImprovementManager" in modified_code:
+                    target_filename = "self_improvement.py"
+                elif "class EvolutionGraph" in modified_code:
+                    target_filename = "memory.py"
+                elif "def run_generation" in modified_code:
+                    target_filename = "executor.py"
+                    
+                if not target_filename:
+                    log("❌ Impossible de déterminer le fichier cible pour la mutation.", category="Self-Improvement")
+                    continue # Try next attempt or fail
+                    
+                target_file = self.sandbox_dir / "core" / target_filename
+                with open(target_file, "w", encoding="utf-8") as f:
+                    f.write(modified_code)
+                        
+                log(f"✅ Fichier {target_filename} muté dans la sandbox (syntaxe validée).", category="Self-Improvement")
+                return True
         
         log("❌ Échec du sandboxing après toutes les tentatives.", category="ERROR")
         # Nettoyage

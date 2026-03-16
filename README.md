@@ -10,28 +10,19 @@ Dans un paradigme classique, les agents IA exécutent des tâches selon des prom
 
 Le projet a atteint un stade de maturité industrielle, consolidant ses performances records par une architecture logicielle épurée et hautement performante :
 
-1. **Optimisation Algorithmique Avancée (v26)** : 
-   Le système s'est auto-mis à jour **26 fois**. La dernière évolution a vu le moteur refactoriser intégralement son pipeline de nettoyage de données, fusionnant de multiples passes de regex en une **passe unique optimisée**, réduisant drastiquement la charge computationnelle.
+1. **Méta-Évolution Profonde (v26)** : 
+   L'Essaim d'Architectes a désormais accès à l'intégralité du dossier `core/`. Il peut modifier non seulement les agents et l'orchestrateur, mais aussi sa propre logique d'auto-amélioration et son environnement.
 
-2. **Élimination de la Dette Technique (v25)** :
-   Application autonome du principe DRY (*Don't Repeat Yourself*). Le système a identifié et supprimé les duplications de code entre l'orchestrateur (`meta_mas.py`) et ses agents, garantissant une cohérence structurelle parfaite et une fiabilité accrue à **97.8% de fitness**.
+2. **Benchmark Étendu à 25 Questions** :
+   Le défi logique a été augmenté à **25 problèmes** complexes couvrant la logique, les mathématiques, la combinatoire et la géométrie, poussant le système vers ses limites théoriques.
 
-2. **Pipeline de Nettoyage Unifié (v16-v21)** :
-   La logique de traitement des sorties LLM a été harmonisée. Le système utilise désormais une fonction `clean_think_tags` centralisée et robuste, capable de gérer les balises `<think>` mal fermées et d'éliminer les pensées internes des modèles de raisonnement (R1, o1) avant l'évaluation.
+3. **Optimisation Algorithmique Avancée** : 
+   Refactorisation intégrale du pipeline de nettoyage de données avec une passe unique optimisée, réduisant drastiquement la charge computationnelle.
 
-3. **Compatibilité Multi-Modèles Étendue (v20)** :
-   Intégration du support natif pour les formats de réflexion spécifiques, notamment le format **MiniMax** (`<|im_start|>think...<|im_end|>`), assurant une compatibilité parfaite avec les derniers modèles de pointe.
+4. **Élimination de la Dette Technique** :
+   Application autonome du principe DRY (*Don't Repeat Yourself*). Le système garantit une cohérence structurelle parfaite et une fiabilité accrue à **97.8% de fitness** (sur l'ancien benchmark).
 
-4. **Optimisation des Structures de Données (v21)** :
-   Le suivi de la stagnation et l'historique des scores ont été migrés vers des structures à complexité constante (**O(1)** via `collections.deque`), optimisant les cycles d'évolution prolongés.
-
-5. **Estimation Hybride du Budget (v22)** :
-   Le calcul des tokens (`estimate_tokens`) a été affiné avec un modèle hybride : des coefficients différenciés pour les messages courts, moyens et longs. Cela permet une gestion du budget beaucoup plus fine et évite les erreurs de prédiction sur les réponses concises.
-
-6. **Benchmark de Raisonnement Multi-Dimensionnel** :
-   L'environnement d'évaluation repose sur 15 problèmes de logique pure, mathématiques et géométrie. La complexité accrue force le système à faire émerger des stratégies de prompt (Chain-of-Thought) de haut niveau.
-
-7. **Allocation Dynamique et Mode Survie** : 
+5. **Allocation Dynamique et Mode Survie** : 
    La population d'agents s'ajuste dynamiquement en fonction du budget restant et de la vitesse de progrès, avec un "mode survie" automatique si les ressources deviennent critiques.
 
 ## Architecture Modulaire
