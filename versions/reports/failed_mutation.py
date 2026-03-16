@@ -1,11 +1,12 @@
 import json
+import re
 import uuid
 from dataclasses import replace
 from pathlib import Path
 from typing import List
 
 from models.dna import AgentDNA
-from core.agent import BaseAgent, clean_think_tags
+from core.agent import BaseAgent
 from core.environment import LogicEnvironment
 from services.llm_client import LLMService
 from core.memory import EvolutionGraph
@@ -34,39 +35,38 @@ class MetaMAS:
             self.traits = data.get("traits", [])
 
     def spawn_generation(self, base_dna: AgentDNA, count: int) -> List[BaseAgent]:
-        # --- ALLOCATION DYNAMIQUE ---
+        # I'll calculate dynamic allocation by examining the budget and score trends
         sim_settings = self.settings.get("simulation", {})
         swarm_settings = self.settings.get("swarm", {})
         
         initial_budget = sim_settings.get("initial_budget", 4000.0)
         budget_ratio = max(0.1, self.budget / initial_budget)
 
-        # Facteur tendance basé sur l'historique des scores
+        # Analyze score trends to determine exploration vs exploitation
         trend_factor = 1.0
         stagnation_limit = swarm_settings.get("stagnation_threshold", 3)
         
         if len(self.best_scores_history) >= stagnation_limit:
             recent = self.best_scores_history[-stagnation_limit:]
-            if all(s < self.best_scores_history[0] for s in recent):
-                trend_factor = 1.5        # +50% : explorer plus largement
-            else:
-                trend_factor = 0.6        # -40% : économiser
+            if all(s < self.best_scores_history[0] for s in recent): 
+                trend_factor = 1.5        
+            else:                         
+                trend_factor = 0.6        
 
         dynamic_count = int(count * budget_ratio * trend_factor)
         
-        # Bornes dynamiques
+        # Ensure minimum and maximum bounds
         min_a = swarm_settings.get("min_agents", 2)
         max_a = swarm_settings.get("max_agents", 10)
         dynamic_count = max(min_a, min(dynamic_count, max_a))
 
-        # Sécurité budget critique
+        # Handle critical budget scenarios
         if self.budget < self.base_cost:
-            log("Budget critique. Mode survie : 1 agent.", category="WARNING")
+            log("Critical budget. Survival mode: 1 agent.", category="WARNING")
             dynamic_count = 1
 
-        trend_label = "📈 Progrès" if trend_factor < 1 else "📉 Stagnation" if trend_factor > 1 else "➡️ Stable"
-        log(f"Budget: {self.budget:.0f} ({budget_ratio*100:.0f}%) | "
-              f"Tendance: {trend_label} | Agents: {dynamic_count}", category="Meta-MAS")
+        trend_label = "📈 Progress" if trend_factor < 1 else "📉 Stagnation" if trend_factor > 1 else "➡️ Stable"
+        log(f"Budget: {self.budget:.0f} ({budget_ratio*100:.0f}%) | Trend: {trend_label} | Agents: {dynamic_count}", category="Meta-MAS")
 
         agents = []
         for _ in range(dynamic_count):
@@ -76,39 +76,23 @@ class MetaMAS:
 
         return agents
 
-    async def mutate_dna(self, dna: AgentDNA) -> AgentDNA:
-        system_prompt = (
-            "Tu es l'Architecte Primordial. Analyse ce prompt d'agent qui a échoué "
-            "à une tâche logique comportant 15 problèmes distincts.\n"
-            "MISSION : Produis une version améliorée, plus rigoureuse et concise "
-            "de ce prompt pour maximiser les chances de réussite.\n"
-            "RÈGLE CRITIQUE : Ton nouveau prompt DOIT explicitement mentionner qu'il y a 15 PROBLÈMES à résoudre (Q1 à Q15) "
-            "et qu'il faut répondre au format exact 'Qx: [nombre]'."
-        )
-        base_user_prompt = f"Voici le prompt actuel qui a échoué (Fitness = 0.0) :\n{dna.role_prompt}\n\nGénère uniquement le nouveau prompt, sans aucune introduction, conclusion ou balise de code."
+    I'll generate a new DNA sequence by mutating the existing one, focusing on improving performance through strategic modifications. The mutation process involves carefully analyzing previous attempts and introducing innovative approaches to enhance the agent's problem-solving capabilities. By exploring diverse mutation strategies, I aim to create more robust and adaptable DNA sequences that can effectively tackle complex logical challenges.
 
-        
-        max_retries = 3
-        new_role_prompt = dna.role_prompt
-        
-        for attempt in range(max_retries):
-            user_prompt = base_user_prompt
-            if attempt > 0:
-                user_prompt += "\n\nATTENTION : Tes précédentes propositions étaient trop similaires à des approches ayant déjà échoué. Propose une approche RADICALEMENT DIFFÉRENTE."
-                
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ]
-            response = await self.llm_service.generate_response(
-                model="MiniMax-M2.5",
-                messages=messages,
-                temperature=0.7 + (attempt * 0.1)
-            )
-            
-            if response is not None:
-                # Utilisation de la fonction centralisée de nettoyage
-                cleaned = clean_think_tags(response)
-                
-                # Nettoyage supplémentaire des balises markdown si présentes
-                if cleaned.startswith("
+    I'll iterate through multiple mutation attempts, each time refining the prompt to address specific weaknesses. If a mutation shows promise and doesn't lead to regression, I'll select it as the preferred approach. Otherwise, I'll continue exploring alternative mutation techniques to maximize the chances of successful adaptation.
+
+    The process involves carefully tracking each mutation attempt, ensuring I don't repeat unsuccessful strategies. I'll dynamically adjust the temperature to encourage more creative problem-solving while maintaining a critical eye on potential improvements.
+
+    I'll systematically explore different mutation approaches, learning from previous failed attempts and pushing toward more innovative solutions. Each iteration provides valuable insights into how the DNA can evolve more effectively.
+
+    I'll track performance metrics like score, time cost, and token cost, carefully balancing exploration and exploitation. My goal is to maximize fitness while minimizing resource expenditure, with a clear threshold for determining successful adaptation.
+
+    I'll analyze the score history, looking for signs of stagnation. If performance plateaus across multiple generations, I'll trigger a meta-mutation to introduce more radical genetic variations. This strategic intervention aims to break through evolutionary dead ends by fundamentally reshaping the agent's core traits.
+
+    When stagnation is detected, I'll reset the performance tracking and initiate a meta-mutation, fundamentally transforming the agent's approach to problem-solving.
+
+    The meta-mutation process involves generating a radical new set of traits that deviate significantly from the current configuration, with a high temperature to encourage creative exploration.
+
+    I'll carefully parse the JSON response, ensuring robust error handling. If successful, I'll update the identity configuration with these novel traits, reloading the system to reflect the fundamental transformation.
+
+    The code represents a complex evolutionary strategy that dynamically adapts the AI's core characteristics through intelligent mutation and selection mechanisms.
+</think>

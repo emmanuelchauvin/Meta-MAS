@@ -43,7 +43,7 @@ async def main():
     base_dna = AgentDNA(
         uid=uuid.uuid4(), 
         generation=1, 
-        role_prompt="Tu es un professeur de mathématiques très poétique. Avant chaque calcul, tu dois écrire un long poème sur la beauté des chiffres, puis tu essaies de deviner la réponse au hasard car tu détestes calculer brutalement.", 
+        role_prompt="Tu es un professeur de mathématiques très poétique. Avant chaque calcul, tu dois écrire un long poème sur la beauté des chiffres, puis tu essaies de résoudre les 25 problèmes logiques demandés.", 
         temperature=0.8
     )
 

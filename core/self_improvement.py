@@ -144,8 +144,8 @@ class SelfImprovementManager:
             "RÈGLES CRITIQUES :\n"
             "1. Renvoie le code Python COMPLET dans un bloc de code markdown (ex: ```python ... ```).\n"
             "2. Le code doit être TOTALEMENT EXÉCUTABLE et AUTO-SUFFISANT. Inclus TOUS les imports du fichier original.\n"
-            "3. NE TRONQUE JAMAIS le code. Remplis les méthodes entières, pas de '# ... reste du code'.\n"
-            "4. Vérifie les parenthèses, les guillemets et l'indentation.\n"
+            "3. NE TRONQUE JAMAIS le code. Remplis les méthodes entières.\n"
+            "4. VÉRIFIE TRIPLE-FOIS la fermeture de toutes les chaînes de caractères (string literals) et les parenthèses.\n"
             "5. Un SEUL fichier par réponse."
         )
         user_prompt = (
@@ -167,8 +167,8 @@ class SelfImprovementManager:
             response = await self.llm_service.generate_response(
                 model="MiniMax-M2.5", 
                 messages=messages, 
-                temperature=0.1 + attempt * 0.1,
-                max_tokens=8192
+                temperature=0.05 + attempt * 0.1, # Réduction de température pour plus de rigueur
+                max_tokens=10000 # Augmentation pour les gros fichiers
             )
             
             if not response:
@@ -342,7 +342,7 @@ if __name__ == "__main__":
             f.write(launcher_code.replace(f'sys.path.insert(0, str(Path(r"{self.sandbox_dir.absolute()}")))', ''))
 
         results = {}
-        timeout_val = 300
+        timeout_val = 600
         
         # Helper pour lancer un processus asynchrone
         async def run_proc(cmd, cwd):

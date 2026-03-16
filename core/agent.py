@@ -105,7 +105,7 @@ class BaseAgent:
                     messages=messages,
                     temperature=self.dna.temperature
                 ),
-                timeout=120.0  # Timeout individuel par agent
+                timeout=180.0  # Timeout individuel par agent
             )
         except asyncio.TimeoutError:
             response = "ERREUR : Timeout de l'agent."

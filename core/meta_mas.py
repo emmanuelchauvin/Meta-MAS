@@ -48,10 +48,12 @@ class MetaMAS:
         
         if len(self.best_scores_history) >= stagnation_limit:
             recent = self.best_scores_history[-stagnation_limit:]
-            if all(s < self.best_scores_history[0] for s in recent): # v2 fix already here
+            if len(set(recent)) == 1:             # stagnation réelle
                 trend_factor = 1.5        # +50% : explorer plus largement
-            else:                         # progrès
+            elif recent[-1] > recent[0]:          # progrès
                 trend_factor = 0.6        # -40% : économiser
+            else:
+                trend_factor = 1.0        # stable
 
         dynamic_count = int(count * budget_ratio * trend_factor)
         
@@ -80,10 +82,10 @@ class MetaMAS:
     async def mutate_dna(self, dna: AgentDNA) -> AgentDNA:
         system_prompt = (
             "Tu es l'Architecte Primordial. Analyse ce prompt d'agent qui a échoué "
-            "à une tâche logique comportant 15 problèmes distincts.\n"
+            "à une tâche logique comportant 25 problèmes distincts.\n"
             "MISSION : Produis une version améliorée, plus rigoureuse et concise "
             "de ce prompt pour maximiser les chances de réussite.\n"
-            "RÈGLE CRITIQUE : Ton nouveau prompt DOIT explicitement mentionner qu'il y a 15 PROBLÈMES à résoudre (Q1 à Q15) "
+            "RÈGLE CRITIQUE : Ton nouveau prompt DOIT explicitement mentionner qu'il y a 25 PROBLÈMES à résoudre (Q1 à Q25) "
             "et qu'il faut répondre au format exact 'Qx: [nombre]'."
         )
         base_user_prompt = f"Voici le prompt actuel qui a échoué (Fitness = 0.0) :\n{dna.role_prompt}\n\nGénère uniquement le nouveau prompt, sans aucune introduction, conclusion ou balise de code."
