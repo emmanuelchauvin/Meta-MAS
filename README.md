@@ -6,24 +6,24 @@ Meta-MAS est une architecture expérimentale de Système Multi-Agents (MAS) capa
 
 Dans un paradigme classique, les agents IA exécutent des tâches selon des prompts définis statiquement. **Meta-MAS** repense cette approche en dotant le système d'une **conscience d'orchestration**. Le système supervise une population de sous-agents qui tentent de résoudre des benchmarks complexes. À chaque itération, le Meta-MAS évalue les performances et fait évoluer soit les prompts (micro-évolution), soit son propre code source (méta-évolution).
 
-## Innovations Majeures (v26)
+## Innovations Majeures (v27)
 
-Le projet a atteint un stade de maturité industrielle, consolidant ses performances records par une architecture logicielle épurée et hautement performante :
+Le projet franchit une étape critique de robustesse et de passage à l'échelle (scaling) :
 
-1. **Méta-Évolution Profonde (v26)** : 
-   L'Essaim d'Architectes a désormais accès à l'intégralité du dossier `core/`. Il peut modifier non seulement les agents et l'orchestrateur, mais aussi sa propre logique d'auto-amélioration et son environnement.
+1. **Stabilité des Mutations (v27)** :
+   Implémentation de protocoles de sécurité logicielle interdisant les erreurs de syntaxe lors de l'auto-mutation. Le système auto-valide désormais la fermeture des chaînes de caractères et la complétude du code généré.
 
-2. **Benchmark Étendu à 25 Questions** :
-   Le défi logique a été augmenté à **25 problèmes** complexes couvrant la logique, les mathématiques, la combinatoire et la géométrie, poussant le système vers ses limites théoriques.
+2. **Benchmark 25 - Pilotage par Objectifs** :
+   Le moteur d'évolution a été reprogrammé pour cibler explicitement les 25 problèmes du nouveau benchmark, empêchant la stagnation sur les modèles de résolution simplifiés.
 
-3. **Optimisation Algorithmique Avancée** : 
-   Refactorisation intégrale du pipeline de nettoyage de données avec une passe unique optimisée, réduisant drastiquement la charge computationnelle.
+3. **Optimisation des Timeouts & Ressources** :
+   Ajustement dynamique des temps de réflexion (180s/agent) et des fenêtres de validation (600s/tournoi) pour supporter la complexité accrue des problèmes de combinatoire et de géométrie.
 
-4. **Élimination de la Dette Technique** :
-   Application autonome du principe DRY (*Don't Repeat Yourself*). Le système garantit une cohérence structurelle parfaite et une fiabilité accrue à **97.8% de fitness** (sur l'ancien benchmark).
+4. **Méta-Évolution Profonde (v26-v27)** : 
+   L'Essaim d'Architectes possède une vision holistique du dossier `core/`, lui permettant de refactorer l'orchestrateur, les agents et sa propre logique d'amélioration en temps réel.
 
-5. **Allocation Dynamique et Mode Survie** : 
-   La population d'agents s'ajuste dynamiquement en fonction du budget restant et de la vitesse de progrès, avec un "mode survie" automatique si les ressources deviennent critiques.
+5. **Élimination de la Dette Technique** :
+   Application autonome du principe DRY (*Don't Repeat Yourself*). Le système garantit une cohérence structurelle parfaite et une fiabilité accrue.
 
 ## Architecture Modulaire
 
