@@ -24,6 +24,7 @@ class MetaMAS:
         
         # Load hyperparams from settings
         sim_settings = self.settings.get("simulation", {})
+        self.model_name = sim_settings.get("model_name", "MiniMax-M2.5")
         self.budget = sim_settings.get("initial_budget", 4000.0)
         self.base_cost = 10.0
         self.best_scores_history = []
@@ -81,7 +82,7 @@ class MetaMAS:
         agents = []
         for _ in range(dynamic_count):
             new_dna = replace(base_dna, uid=uuid.uuid4())
-            agent = BaseAgent(dna=new_dna, llm_service=self.llm_service)
+            agent = BaseAgent(dna=new_dna, llm_service=self.llm_service, model_name=self.model_name)
             agents.append(agent)
 
         return agents
@@ -136,7 +137,7 @@ class MetaMAS:
                 {"role": "user", "content": base_user_prompt + (f"\n\nNote: Variante {idx+1}. Propose une approche originale." if idx > 0 else "")}
             ]
             
-            res = await self.llm_service.generate_response(model="MiniMax-M2.5", messages=msg, temperature=curr_temp)
+            res = await self.llm_service.generate_response(model=self.model_name, messages=msg, temperature=curr_temp)
             if not res: return ""
             
             # Nettoyage robuste (identique à agent.py en esprit)
@@ -277,7 +278,7 @@ class MetaMAS:
         ]
         
         response = await self.llm_service.generate_response(
-            model="MiniMax-M2.5",
+            model=self.model_name,
             messages=messages,
             temperature=0.9 # High temperature for radical changes
         )

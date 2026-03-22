@@ -37,7 +37,7 @@ async def main():
 
     # 2. Orchestrateurs
     meta_mas = MetaMAS(llm_service=llm_service, settings=settings)
-    meta_manager = SelfImprovementManager(llm_service=llm_service)
+    meta_manager = SelfImprovementManager(llm_service=llm_service, settings=settings)
     
     # 3. ADN de base (intentionnellement sous-optimal)
     base_dna = AgentDNA(

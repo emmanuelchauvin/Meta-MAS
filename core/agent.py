@@ -4,11 +4,13 @@
 
 __all__ = ["BaseAgent", "compute_prompt_fitness", "estimate_tokens", "clean_think_tags", "analyze_task_context"]
 
+import re
+import asyncio
+from typing import Optional
+
 _tiktoken_encoder = None
 _tiktoken_init_failed = False
 
-import re
-import asyncio
 from models.dna import AgentDNA
 from services.llm_client import LLMService
 
@@ -55,7 +57,16 @@ _TASK_CONTEXT_PATTERNS = {
     "analyze": re.compile(r"(?:analys|évalue|examin|étudi|comprend|expliqu|pourquoi|comment\s+cela)", re.IGNORECASE),
     "creative": re.compile(r"(?:créative|invente|story|raconter|écris\s+une|romans|poème|imaginer)", re.IGNORECASE),
     "review": re.compile(r"(?:revue|review|check|valid|test|qualité|améliorer|optimiser)", re.IGNORECASE),
-    "data": re.compile(r"(?:data|données|tableau|stats|calcul|chiffre|nom NOMBRE|quantité)", re.IGNORECASE),
+    "data": re.compile(r"(?:data|données|tableau|stats|calcul|chiffre|nom\s+NOMBRE|quantité)", re.IGNORECASE),
+}
+
+# Poids par défaut pour le calcul de fitness (équilibré pour tâches générales)
+_DEFAULT_FITNESS_WEIGHTS = {
+    "instructions": 0.30,
+    "examples": 0.25,
+    "structure": 0.15,
+    "length": 0.20,
+    "similarity": 0.10
 }
 
 
@@ -104,13 +115,7 @@ def analyze_task_context(task: str) -> dict:
     if not task or len(task.strip()) < 5:
         return {
             "task_type": "general",
-            "weights": {
-                "instructions": 0.30,
-                "examples": 0.25,
-                "structure": 0.15,
-                "length": 0.20,
-                "similarity": 0.10
-            },
+            "weights": _DEFAULT_FITNESS_WEIGHTS.copy(),
             "confidence": 0.0
         }
     
@@ -188,14 +193,7 @@ def analyze_task_context(task: str) -> dict:
             "length": 0.15,
             "similarity": 0.10
         },
-        "general": {
-            # Par défaut : balance égale
-            "instructions": 0.30,
-            "examples": 0.25,
-            "structure": 0.15,
-            "length": 0.20,
-            "similarity": 0.10
-        }
+        "general": _DEFAULT_FITNESS_WEIGHTS.copy()
     }
     
     return {
@@ -205,7 +203,7 @@ def analyze_task_context(task: str) -> dict:
     }
 
 
-def compute_prompt_fitness(prompt: str, parent_prompt: str = "", task: str = "") -> float:
+def compute_prompt_fitness(prompt: str, reference: str = "", weights: Optional[dict] = None, task: Optional[str] = None) -> float:
     """
     Calcule un score de qualité structurelle pour un prompt muté.
     
@@ -220,10 +218,20 @@ def compute_prompt_fitness(prompt: str, parent_prompt: str = "", task: str = "")
     - Longueur suffisante (indicateur de détail)
     - Similarité lexicale avec le parent (évite les mutations trop extrêmes)
     
+    IMPORTANT: Si le paramètre 'task' est fourni, les poids seront automatiquement
+    adaptés au type de tâche détecté (debug, code, créatif, etc.). Vous pouvez
+    également fournir des poids explicites via le paramètre 'weights'.
+    
     Args:
         prompt: Le prompt muté à évaluer
-        parent_prompt: Optionnel, le prompt parent pour calculer la similarité
-        task: Optionnel, le task contextuel pour adapter les poids de fitness
+        reference: Optionnel, le prompt parent pour calculer la similarité lexicale
+        weights: Optionnel, dictionnaire des poids pour chaque critère de fitness.
+                 Si non fourni, utilise les poids du contexte de tâche (si disponible)
+                 ou les poids par défaut (compatibilité).
+                 Les clés attendues sont: "instructions", "examples", "structure",
+                 "length", "similarity"
+        task: Optionnel, la description de la tâche pour adapter automatiquement
+              les poids au contexte. Si 'weights' est fourni, ce paramètre est ignoré.
         
     Returns:
         Score de fitness entre 0.0 et 1.0 (1.0 = qualité optimale)
@@ -231,51 +239,53 @@ def compute_prompt_fitness(prompt: str, parent_prompt: str = "", task: str = "")
     if not prompt or len(prompt.strip()) < 10:
         return 0.0
     
-    # Analyser le contexte de la tâche pour adapter les poids
-    if task:
-        context = analyze_task_context(task)
-        weights = context["weights"]
-    else:
-        # Utiliser les poids par défaut si pas de task fourni
-        weights = {
-            "instructions": 0.30,
-            "examples": 0.25,
-            "structure": 0.15,
-            "length": 0.20,
-            "similarity": 0.10
-        }
+    # Déterminer les poids effectifs selon la priorité: weights explicites > task > défaut
+    effective_weights = weights
+    if weights is None:
+        if task:
+            # Analyser le contexte de la tâche pour adapter les poids automatiquement
+            # Cette intégration permet au système d'évolution d'être contextuellement intelligent
+            task_context = analyze_task_context(task)
+            effective_weights = task_context["weights"]
+        else:
+            effective_weights = _DEFAULT_FITNESS_WEIGHTS.copy()
+    
+    # S'assurer que toutes les clés de poids existent (robustesse)
+    for key in ["instructions", "examples", "structure", "length", "similarity"]:
+        if key not in effective_weights:
+            effective_weights[key] = 0.15  # Valeur par défaut équilibrée
     
     score = 0.0
     
     # 1. Présence d'instructions explicites
     # Les prompts avec des verbes d'action sont généralement plus efficaces
     has_instructions = _QUALITY_PATTERNS["instructions"].search(prompt)
-    score += weights["instructions"] if has_instructions else 0.0
+    score += effective_weights["instructions"] if has_instructions else 0.0
     
     # 2. Présence d'exemples
-    # Les exemples improves significativement la qualité des réponses
+    # Les exemples améliorent significativement la qualité des réponses
     has_examples = _QUALITY_PATTERNS["examples"].search(prompt)
-    score += weights["examples"] if has_examples else 0.0
+    score += effective_weights["examples"] if has_examples else 0.0
     
     # 3. Structure claire avec marqueurs
     # Les listes et structures numérotées indiquent un prompt bien organisé
     has_structure = _QUALITY_PATTERNS["structure_markers"].search(prompt)
-    score += weights["structure"] if has_structure else 0.0
+    score += effective_weights["structure"] if has_structure else 0.0
     
     # 4. Longueur suffisante
     # Les prompts trop courts manquent généralement de contexte
     prompt_length = len(prompt)
     if prompt_length >= 200:
-        score += weights["length"]
+        score += effective_weights["length"]
     elif prompt_length >= 100:
-        score += weights["length"] * 0.5
+        score += effective_weights["length"] * 0.5
     elif prompt_length >= 50:
-        score += weights["length"] * 0.25
+        score += effective_weights["length"] * 0.25
     
     # 5. Similarité lexicale avec le parent
     # Évite les mutations trop extrêmes qui perdent le contexte original
-    if parent_prompt:
-        parent_words = set(parent_prompt.lower().split())
+    if reference:
+        parent_words = set(reference.lower().split())
         prompt_words = set(prompt.lower().split())
         
         if len(parent_words) > 0:
@@ -283,9 +293,9 @@ def compute_prompt_fitness(prompt: str, parent_prompt: str = "", task: str = "")
             # On pénalise si le overlap est trop faible (< 20%) ou trop élevé (< 10%)
             # Le "sweet spot" est entre 30% et 70% de similarité
             if 0.3 <= overlap <= 0.7:
-                score += weights["similarity"]
+                score += effective_weights["similarity"]
             elif 0.1 <= overlap < 0.3 or 0.7 < overlap <= 0.9:
-                score += weights["similarity"] * 0.5
+                score += effective_weights["similarity"] * 0.5
     
     return min(1.0, score)
 
@@ -347,9 +357,10 @@ def _detect_failure_indicators(task: str) -> bool:
 
 
 class BaseAgent:
-    def __init__(self, dna: AgentDNA, llm_service: LLMService):
+    def __init__(self, dna: AgentDNA, llm_service: LLMService, model_name: str = "MiniMax-M2.5"):
         self.dna = dna
         self.llm_service = llm_service
+        self.model_name = model_name
 
     def _compute_adaptive_timeout(self, stagnation_count: int = 0, 
                                    previous_attempts: int = 0) -> float:
@@ -411,7 +422,7 @@ class BaseAgent:
             # Timeout adaptatif basé sur le contexte d'exécution
             response = await asyncio.wait_for(
                 self.llm_service.generate_response(
-                    model="MiniMax-M2.5",
+                    model=self.model_name,
                     messages=messages,
                     temperature=self.dna.temperature
                 ),

@@ -15,8 +15,11 @@ from models.dna import AgentDNA
 from utils.logger import log
 
 class SelfImprovementManager:
-    def __init__(self, llm_service: LLMService):
+    def __init__(self, llm_service: LLMService, settings: dict = None):
         self.llm_service = llm_service
+        self.settings = settings or {}
+        sim_settings = self.settings.get("simulation", {})
+        self.model_name = sim_settings.get("model_name", "MiniMax-M2.5")
         self.base_dir = Path(__file__).parent.parent
         self.core_dir = self.base_dir / "core"
         # The temporary sandbox used for mutations
@@ -123,7 +126,7 @@ class SelfImprovementManager:
             {"role": "user", "content": user_prompt}
         ]
         
-        response = await self.llm_service.generate_response(model="MiniMax-M2.5", messages=messages, temperature=0.8)
+        response = await self.llm_service.generate_response(model=self.model_name, messages=messages, temperature=0.8)
         
         if response:
             log(f"Proposition retenue : {response.strip()[:200]}...", category="Self-Improvement")
@@ -199,7 +202,7 @@ class SelfImprovementManager:
         )
         
         target_filename = await self.llm_service.generate_response(
-            model="MiniMax-M2.5",
+            model=self.model_name,
             messages=[{"role": "user", "content": id_prompt}],
             temperature=0.0
         )
@@ -260,7 +263,7 @@ class SelfImprovementManager:
         for attempt in range(max_attempts):
             log(f"Mutation du code de {target_filename} (tentative {attempt+1}/{max_attempts})...", category="Self-Improvement")
             response = await self.llm_service.generate_response(
-                model="MiniMax-M2.5", 
+                model=self.model_name, 
                 messages=messages, 
                 temperature=0.1 + attempt * 0.1,
                 max_tokens=8000

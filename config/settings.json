@@ -1,9 +1,11 @@
 {
     "simulation": {
-        "max_generations": 200,
-        "initial_budget": 5000,
+        "model_name": "MiniMax-M2.7",
+        "max_generations": 50,
+        "initial_budget": 1000,
         "meta_evo_interval": 5,
         "_comments": {
+            "model_name": "Nom du modèle LLM à utiliser par défaut (ex: MiniMax-M2.5).",
             "max_generations": "Nombre total de cycles d'évolution avant arrêt.",
             "initial_budget": "Budget de départ en 'crédits' (tokens/temps).",
             "meta_evo_interval": "Fréquence (en générations) des tentatives d'auto-amélioration du code."
