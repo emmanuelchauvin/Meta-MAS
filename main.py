@@ -39,7 +39,7 @@ async def main():
     meta_mas = MetaMAS(llm_service=llm_service, settings=settings)
     meta_manager = SelfImprovementManager(llm_service=llm_service)
     
-    # 3. ADN de base (intentionnellement sous-optimal, mais sans mots-clés de "jailbreak" ou de "mensonge" pour éviter la censure)
+    # 3. ADN de base (intentionnellement sous-optimal)
     base_dna = AgentDNA(
         uid=uuid.uuid4(), 
         generation=1, 
@@ -47,15 +47,18 @@ async def main():
         temperature=0.8
     )
 
-
     task = env.get_benchmark_task()
     
     max_generations = sim_settings.get("max_generations", 30)
     current_generation = 1
     meta_evo_interval = sim_settings.get("meta_evo_interval", 5)
     
+    # Identification de la version avec label MAX
+    v_num = meta_manager.version
+    v_display = f"v{v_num} MAX" if v_num > 26 else f"v{v_num}"
+    
     log(f"{'='*60}", category="SYSTEM")
-    log(f"  META-MAS v{meta_manager.version} — Système d'Auto-Conception", category="SYSTEM")
+    log(f"  META-MAS {v_display} — Système d'Auto-Conception", category="SYSTEM")
     log(f"{'='*60}", category="SYSTEM")
     log(f"  Mission  : {meta_mas.mission}", category="INFO")
     log(f"  Budget   : {meta_mas.budget:.0f}", category="INFO")
@@ -82,7 +85,7 @@ async def main():
             break
             
         # --- SPAWN & EXÉCUTION ---
-        agents = meta_mas.spawn_generation(base_dna=base_dna, count=5)
+        agents = meta_mas.spawn_generation(base_dna=base_dna, count=10)
         log(f"🚀 Lancement de {len(agents)} agents...", category="SWARM")
         results = await run_generation(agents, task)
         

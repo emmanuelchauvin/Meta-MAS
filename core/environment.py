@@ -26,15 +26,15 @@ class LogicEnvironment:
         "Q13": "100",  # Pourcentages successifs
         "Q14": "14",   # Logique jours ouvrables
         "Q15": "8",     # Gouttes d'eau
-        "Q16": "15",    # Somme des chiffres
+        "Q16": "8",     # Somme des chiffres de 2^9 (512 -> 5+1+2=8)
         "Q17": "50",    # Probabilité pile-face (50%)
         "Q18": "720",   # Factorielle de 6
         "Q19": "25",    # Racines carrées
         "Q20": "10",    # Escargot dans le puits (10 jours)
-        "Q21": "12",    # Douzaine de douzaines
+        "Q21": "144",   # Douzaine de douzaines (12*12=144)
         "Q22": "121",   # Suite de carrés
-        "Q23": "48",    # Diviseurs de 48
-        "Q24": "1260",  # PPCM
+        "Q23": "48",    # Diviseurs de 2520 (juste pour info : 48 est bon)
+        "Q24": "420",   # PPCM de 12, 15, 20 et 21 = 420
         "Q25": "180"    # Somme des angles d'un triangle
     }
 
@@ -115,7 +115,7 @@ class LogicEnvironment:
 
             "Q22: Quel est le nombre suivant dans la suite : 1, 4, 9, 16, 25, 36, 49, 64, 81, 100, ... ?\n\n"
 
-            "Q23: Combien de diviseurs possède le nombre 48 ?\n\n"
+            "Q23: Combien de diviseurs possède le nombre 2520 ?\n\n"
 
             "Q24: Quel est le plus petit commun multiple (PPCM) de 12, 15 et 21 ?\n\n"
 

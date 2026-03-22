@@ -47,9 +47,10 @@ class SelfImprovementManager:
         v_cur = results.get("v_current", {})
         v_next = results.get("v_next", {})
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        v_label = f"v{self.version} MAX" if self.version > 26 else f"v{self.version}"
 
         report = (
-            f"# Rapport de Mise à Jour — Meta-MAS v{self.version}\n\n"
+            f"# Rapport de Mise à Jour — Meta-MAS {v_label}\n\n"
             f"**Date :** {now}\n\n"
             f"## Résumé de la modification\n\n"
             f"{modification}\n\n"
@@ -72,20 +73,31 @@ class SelfImprovementManager:
         log(report, category="Self-Improvement")
         log(f"--- Fin du Rapport ---", category="Self-Improvement")
 
-    async def reflect_on_architecture(self) -> str | None:
+    async def reflect_on_architecture(self, failed_questions_context: str = "") -> str | None:
         """
-        Analyse TOUS les fichiers sources du dossier core/ et propose une unique modification.
+        Analyse les fichiers sources pertinents du dossier core/ en se basant sur le contexte d'échec
+        et propose une unique modification ciblée.
         """
         log("Initialisation de l'Essaim d'Architectes pour Méta-Réflexion Globale...", category="Self-Improvement")
         
-        # Read all files in core/ to provide full context
+        # === AMÉLIORATION : Sélection intelligente des fichiers à analyser ===
+        # Au lieu d'envoyer TOUT le code, on identifie d'abord les fichiers pertinents
+        # en fonction du contexte d'échec (failed_questions_context)
+        
+        priority_files = self._identify_priority_files(failed_questions_context)
+        
+        # Lire uniquement les fichiers prioritaires pour réduire la charge de tokens
         source_context = ""
         try:
-            for file_path in self.core_dir.glob("*.py"):
-                if file_path.name == "__init__.py":
+            for file_path in priority_files:
+                if file_path.name == "__init__.py" or not file_path.exists():
                     continue
                 with open(file_path, "r", encoding="utf-8") as f:
                     content = f.read()
+                # Limiter chaque fichier à 200 lignes pour éviter les prompts trop longs
+                lines = content.split('\n')
+                if len(lines) > 200:
+                    content = '\n'.join(lines[:200]) + "\n# ... (contenu tronqué pour optimisation)"
                 source_context += f"--- FICHIER : core/{file_path.name} ---\n```python\n{content}\n```\n\n"
         except Exception as e:
             log(f"Erreur de lecture des sources : {e}", category="ERROR")
@@ -93,14 +105,18 @@ class SelfImprovementManager:
 
         system_prompt = (
             "Tu es l'Essaim Architecte du projet Meta-MAS. Ton but est d'améliorer le code source de ton propre système.\n"
-            "Tu as accès à l'intégralité du code source du cœur du système.\n"
+            "Tu as accès aux fichiers sources pertinents du cœur du système (ceux identifiés comme liés au problème).\n"
+            "FICHIERS DISPONIBLES : [agent.py, meta_mas.py, environment.py, executor.py, memory.py, self_improvement.py]\n"
+            "Note : 'meta_mas.py' est l'orchestrateur principal. Il n'existe pas de fichier nommé 'orchestrator.py'.\n"
             "MISSION : Tu dois proposer UNE ET UNE SEULE modification claire et précise du code.\n"
+            "CONTRAINTE TECHNIQUE : Un seul fichier sera modifié à la fois. Ta proposition doit être réalisable en modifiant UN SEUL fichier du dossier 'core/'.\n"
             "Tu peux modifier la logique d'évolution, la sandbox, l'orchestrateur ou les agents eux-mêmes.\n"
             "PRIVILÉGIE une modification SIMPLE mais ayant un impact significatif sur la performance, la robustesse ou l'intelligence collective.\n"
             "Ne fournis QUE ta proposition explicative brève (max 150 mots), pas de code complet."
         )
         
-        user_prompt = f"Voici le contexte complet du système :\n\n{source_context}\nQuelle modification architecturale ou algorithmique proposes-tu ?"
+        context_hint = f"\n\nContexte d'échec récent à prendre en compte:\n{failed_questions_context}" if failed_questions_context else ""
+        user_prompt = f"Voici le contexte des fichiers sources du système :\n\n{source_context}{context_hint}\n\nQuelle modification architecturale ou algorithmique proposes-tu ?"
         
         messages = [
             {"role": "system", "content": system_prompt},
@@ -116,44 +132,123 @@ class SelfImprovementManager:
             log("L'Essaim n'a rien proposé.", category="Self-Improvement")
             return None
 
+    def _identify_priority_files(self, failed_context: str) -> list:
+        """
+        Identifie les fichiers prioritaires à analyser en fonction du contexte d'échec.
+        Cela réduit considérablement la charge de tokens en évitant d'envoyer tout le code.
+        """
+        priority = []
+        
+        # Mots-clés pour identifier le fichier à problèmes
+        keywords_map = {
+            "agent": ["agent.py", "executor.py"],
+            "timeout": ["agent.py", "executor.py"],
+            "executor": ["executor.py", "agent.py"],
+            "meta_mas": ["meta_mas.py"],
+            "meta orchestrator": ["meta_mas.py"],
+            "environment": ["environment.py", "executor.py"],
+            "benchmark": ["environment.py"],
+            "memory": ["memory.py"],
+            "evolution": ["memory.py", "meta_mas.py"],
+            "llm": ["agent.py", "services/llm_client.py"],
+            "prompt": ["agent.py", "meta_mas.py"],
+            "token": ["agent.py", "environment.py"],
+            "retry": ["executor.py", "meta_mas.py"],
+            "stagnation": ["meta_mas.py", "memory.py"],
+        }
+        
+        failed_lower = failed_context.lower() if failed_context else ""
+        
+        for keyword, files in keywords_map.items():
+            if keyword in failed_lower:
+                for f in files:
+                    path = self.core_dir / f
+                    if path.exists() and path not in priority:
+                        priority.append(path)
+        
+        # Fallback: si pas de contexte ou pas de correspondance, prendre les fichiers principaux
+        if not priority:
+            priority = [
+                self.core_dir / "meta_mas.py",
+                self.core_dir / "agent.py",
+                self.core_dir / "executor.py"
+            ]
+            # Filter existing files
+            priority = [p for p in priority if p.exists()]
+        
+        return priority[:3]  # Maximum 3 fichiers pour garder le prompt concis
+
     async def sandbox_code(self, proposed_modification: str) -> bool:
         """
         Copie les fichiers actuels dans le bac à sable et demande au LLM d'y appliquer la modification.
-        Inclut une validation syntaxique et un mécanisme de retry.
         """
         log("Copie des sources dans la sandbox v_next...", category="Self-Improvement")
         
-        # Nettoyage de v_next s'il existe déjà
         if self.sandbox_dir.exists():
-            shutil.rmtree(self.sandbox_dir)
+            shutil.rmtree(self.sandbox_dir, ignore_errors=True)
         self.sandbox_dir.mkdir(parents=True)
-        
-        # Copier tout le dossier core
         shutil.copytree(self.core_dir, self.sandbox_dir / "core")
         
-        # Lire les fichiers sources
-        with open(self.sandbox_dir / "core" / "agent.py", "r", encoding="utf-8") as f:
-             env_code = f.read()
-             
-        with open(self.sandbox_dir / "core" / "meta_mas.py", "r", encoding="utf-8") as f:
-            meta_code = f.read()
-            
-        system_prompt = (
-            "Tu es un Développeur Expert Python chez Meta-MAS.\n"
-            "TA MISSION : Appliquer la modification demandée et renvoyer le contenu du fichier MIS À JOUR.\n"
-            "RÈGLES CRITIQUES :\n"
-            "1. Renvoie le code Python COMPLET dans un bloc de code markdown (ex: ```python ... ```).\n"
-            "2. Le code doit être TOTALEMENT EXÉCUTABLE et AUTO-SUFFISANT. Inclus TOUS les imports du fichier original.\n"
-            "3. NE TRONQUE JAMAIS le code. Remplis les méthodes entières.\n"
-            "4. VÉRIFIE TRIPLE-FOIS la fermeture de toutes les chaînes de caractères (string literals) et les parenthèses.\n"
-            "5. Un SEUL fichier par réponse."
+        # --- PHASE 1 : IDENTIFIER LE FICHIER CIBLE ---
+        available_files = [f.name for f in self.core_dir.glob("*.py") if f.name != "__init__.py"]
+        id_prompt = (
+            f"Basé sur cette proposition d'amélioration :\n\"{proposed_modification}\"\n\n"
+            f"Quel fichier unique du dossier 'core/' doit être modifié ?\n"
+            f"FICHIERS DISPONIBLES : {available_files}\n\n"
+            "Réponds UNIQUEMENT par le nom du fichier exact parmi la liste ci-dessus."
         )
+        
+        target_filename = await self.llm_service.generate_response(
+            model="MiniMax-M2.5",
+            messages=[{"role": "user", "content": id_prompt}],
+            temperature=0.0
+        )
+        
+        if not target_filename or ".py" not in target_filename or target_filename not in available_files:
+            # Fallback intelligent basé sur le contenu de la proposition
+            prop_lower = proposed_modification.lower()
+            if "agent" in prop_lower: target_filename = "agent.py"
+            elif any(x in prop_lower for x in ["meta", "orchestra", "budget", "stagnation"]): target_filename = "meta_mas.py"
+            elif "environment" in prop_lower or "bench" in prop_lower: target_filename = "environment.py"
+            elif "exec" in prop_lower or "parallel" in prop_lower: target_filename = "executor.py"
+            elif "memory" in prop_lower or "graph" in prop_lower or "regress" in prop_lower: target_filename = "memory.py"
+            elif "self" in prop_lower or "improvement" in prop_lower or "mutate" in prop_lower: target_filename = "self_improvement.py"
+            else: target_filename = "meta_mas.py" # Default safe choice
+            
+        # Extraction propre du basename au cas où le LLM a mis des guillemets ou du texte
+        target_filename = re.sub(r"[`']", "", target_filename).strip().split("/")[-1].split("\\")[-1].split()[-1]
+        
+        # Double vérification finale
+        if target_filename not in available_files:
+            # Si après extraction c'est toujours pas bon (ex: "orchestrator.py"), on force le fallback
+            if "orchestra" in target_filename.lower(): target_filename = "meta_mas.py"
+            elif target_filename not in available_files:
+                target_filename = "meta_mas.py" # Default
+        target_file_path = self.sandbox_dir / "core" / target_filename
+        
+        if not target_file_path.exists():
+            log(f"Fichier cible {target_filename} non trouvé. Abandone.", category="ERROR")
+            return False
+
+        with open(target_file_path, "r", encoding="utf-8") as f:
+            original_code = f.read()
+
+        # --- PHASE 2 : MUTATION CIBLÉE AVEC VALIDATION FONCTIONNELLE ---
+        system_prompt = (
+            "Tu es un Développeur Expert Python. Tu dois appliquer une modification à UN SEUL FICHIER.\n"
+            "RÈGLES D'OR :\n"
+            "1. Renvoie le code Python COMPLET et corrigé.\n"
+            "2. Ne change PAS la signature (nom, arguments, et TYPE DE RETOUR) des fonctions, classes ou méthodes existantes.\n"
+            "   C'est CRITIQUE pour la compatibilité avec le reste du système.\n"
+            "3. Assure-toi que toutes les chaînes (''' ou \"\"\") et parenthèses sont fermées.\n"
+            "4. PAS de blabla, PAS d'introduction. Uniquement le bloc de code markdown."
+        )
+        
         user_prompt = (
-            f"PROPOSITION DE MODIFICATION :\n{proposed_modification}\n\n"
-            f"--- CONTENU ACTUEL DE agent.py ---\n{env_code}\n\n"
-            f"--- CONTENU ACTUEL DE meta_mas.py ---\n{meta_code}\n\n"
-            f"Choisis le fichier à modifier basé sur la proposition. "
-            f"Applique la modification et renvoie le contenu ENTIER ET EXTREMEMENT PROPRE du fichier modifié (code pur).\n"
+            f"FICHIER À MODIFIER : core/{target_filename}\n"
+            f"MODIFICATION DEMANDÉE : {proposed_modification}\n\n"
+            f"--- CODE ORIGINAL ---\n{original_code}\n\n"
+            "Applique la mutation et renvoie le fichier COMPLET."
         )
         
         messages = [
@@ -163,104 +258,148 @@ class SelfImprovementManager:
         
         max_attempts = 2
         for attempt in range(max_attempts):
-            log(f"Mutation du code en cours par le LLM (tentative {attempt+1}/{max_attempts}) (RETRY if > 1)...", category="Self-Improvement")
+            log(f"Mutation du code de {target_filename} (tentative {attempt+1}/{max_attempts})...", category="Self-Improvement")
             response = await self.llm_service.generate_response(
                 model="MiniMax-M2.5", 
                 messages=messages, 
-                temperature=0.05 + attempt * 0.1, # Réduction de température pour plus de rigueur
-                max_tokens=10000 # Augmentation pour les gros fichiers
+                temperature=0.1 + attempt * 0.1,
+                max_tokens=8000
             )
             
-            if not response:
-                continue
+            if not response: continue
                 
-            # --- EXTRACTION DU CODE ---
             modified_code = self._extract_code(response)
+            if not modified_code: continue
             
-            if not modified_code:
-                log("Impossible d'extraire du code valide de la réponse.", category="Self-Improvement")
-                continue
+            # Validation de sécurité (Anti-Snippet)
+            is_valid = True
+            error_msg = ""
             
-            # --- VALIDATION SYNTAXIQUE ---
-            try:
-                compile(modified_code, "<sandbox>", "exec")
-            except SyntaxError as e:
-                with open(self.base_dir / "versions" / "reports" / "failed_mutation.py", "w", encoding="utf-8") as f:
-                    f.write(modified_code)
-                log(f"❌ Code rejeté (SyntaxError ligne {e.lineno}): {e.msg} (RETRY queued). Extracted code written to failed_mutation.py", category="Self-Improvement")
-                # Ajouter le retour d'erreur au prochain essai
-                messages.append({"role": "assistant", "content": response})
-                messages.append({"role": "user", "content": 
-                    f"ERREUR : Ton code contient une SyntaxError à la ligne {e.lineno}: {e.msg}. "
-                    f"Corrige cette erreur et renvoie le fichier COMPLET corrigé. Code Python brut uniquement."
-                })
-                continue
+            # 1. Vérification de la taille (un snippet est souvent bcp plus court)
+            if len(modified_code) < len(original_code) * 0.5:
+                is_valid = False
+                error_msg = "Le code est trop court (possible troncature/snippet)."
             
-                # --- DÉTERMINER LE FICHIER CIBLE DYNAMIQUEMENT ---
-                target_filename = None
-                if "class MetaMAS" in modified_code:
-                    target_filename = "meta_mas.py"
-                elif "class BaseAgent" in modified_code:
-                    target_filename = "agent.py"
-                elif "class LogicEnvironment" in modified_code:
-                    target_filename = "environment.py"
-                elif "class SelfImprovementManager" in modified_code:
-                    target_filename = "self_improvement.py"
-                elif "class EvolutionGraph" in modified_code:
-                    target_filename = "memory.py"
-                elif "def run_generation" in modified_code:
-                    target_filename = "executor.py"
+            # 2. Vérification des imports et classes
+            if "import " not in modified_code or ("class " not in modified_code and "def " not in modified_code):
+                is_valid = False
+                error_msg = "Structure Python manquante (imports ou classes absents)."
+
+            # 3. Validation syntaxique
+            if is_valid:
+                try:
+                    compile(modified_code, f"<sandbox:{target_filename}>", "exec")
+                    with open(target_file_path, "w", encoding="utf-8") as f:
+                        f.write(modified_code)
                     
-                if not target_filename:
-                    log("❌ Impossible de déterminer le fichier cible pour la mutation.", category="Self-Improvement")
-                    continue # Try next attempt or fail
-                    
-                target_file = self.sandbox_dir / "core" / target_filename
-                with open(target_file, "w", encoding="utf-8") as f:
-                    f.write(modified_code)
+                    # === NOUVELLE AMÉLIORATION : Validation fonctionnelle dry-run ===
+                    # On vérifie que le module muté peut être importé et que les classes principales existent
+                    if await self._validate_functional(target_filename, target_file_path):
+                        log(f"✅ {target_filename} muté avec succès (syntaxe et structure validées).", category="Self-Improvement")
+                        return True
+                    else:
+                        is_valid = False
+                        error_msg = "Échec de la validation fonctionnelle (import ou classes manquants)."
                         
-                log(f"✅ Fichier {target_filename} muté dans la sandbox (syntaxe validée).", category="Self-Improvement")
-                return True
+                except SyntaxError as e:
+                    error_msg = f"Erreur de syntaxe (ligne {e.lineno}): {e.msg}"
+                except Exception as e:
+                    error_msg = f"Erreur de validation: {str(e)}"
+
+            log(f"❌ Mutation rejetée : {error_msg}", category="Self-Improvement")
+            messages.append({"role": "assistant", "content": response})
+            messages.append({"role": "user", "content": f"ATTENTION : {error_msg} Tu dois impérativement renvoyer le fichier COMPLET du début à la fin, avec tous les imports et toutes les classes. NE TRONQUE PAS LE CODE."})
         
-        log("❌ Échec du sandboxing après toutes les tentatives.", category="ERROR")
-        # Nettoyage
-        if self.sandbox_dir.exists():
-            shutil.rmtree(self.sandbox_dir, ignore_errors=True)
         return False
 
+    async def _validate_functional(self, filename: str, file_path: Path) -> bool:
+        """
+        Validation fonctionnelle dry-run : vérifie que le module muté peut être importé
+        et que les classes/fonctions principales sont toujours présentes.
+        """
+        validation_code = f"""
+import sys
+sys.path.insert(0, r"{self.sandbox_dir}")
+sys.path.insert(0, r"{self.base_dir}")
+
+try:
+    # Extraire le nom du module (sans .py)
+    module_name = "{filename[:-3]}"
+    
+    # Importer le module
+    import importlib
+    mod = importlib.import_module(f"core.{{module_name}}")
+    
+    # Vérifier les classes principales ( heuristics )
+    required_classes = {{
+        "agent.py": ["BaseAgent"],
+        "meta_mas.py": ["MetaMAS"],
+        "environment.py": ["LogicEnvironment"],
+        "executor.py": ["run_generation"],
+        "memory.py": ["EvolutionGraph"],
+        "self_improvement.py": ["SelfImprovementManager"]
+    }}
+    
+    if "{filename}" in required_classes:
+        for cls in required_classes["{filename}"]:
+            if not hasattr(mod, cls):
+                print(f"ERREUR: Classe {{cls}} manquante")
+                sys.exit(1)
+    
+    print("OK")
+    sys.exit(0)
+    
+except Exception as e:
+    print(f"ERREUR: {{str(e)}}")
+    sys.exit(1)
+"""
+        
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable, "-c", validation_code,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+            
+            if proc.returncode == 0 and b"OK" in stdout:
+                return True
+            else:
+                log(f"Validation fonctionnelle échouée: {stderr.decode() if stderr else stdout.decode()}", category="Self-Improvement")
+                return False
+        except asyncio.TimeoutError:
+            log("Validation fonctionnelle timeout", category="Self-Improvement")
+            return False
+        except Exception as e:
+            log(f"Erreur validation fonctionnelle: {e}", category="Self-Improvement")
+            return False
+
     def _extract_code(self, response: str) -> str | None:
-        """Extrait le code Python d'une réponse LLM, en privilégiant la structure complète."""
+        """Extrait le code Python d'une réponse LLM de manière robuste aux backticks imbriqués."""
         if not response:
             return None
         
-        # 1. Try to extract from markdown code blocks first without stripping anything
-        code_blocks = re.findall(r"```(?:[pP]ython)?\s*\n(.*?)(?:```|$)", response, re.DOTALL)
+        # 1. On cherche le contenu entre le PREMIER ```python et le DERNIER ``` 
+        match = re.search(r"```(?:python)?\s*\n(.*?)\n\s*```", response, re.DOTALL | re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
             
-        if code_blocks:
-            # Sort by length and pick the longest
-            code_blocks.sort(key=len, reverse=True)
-            for code in code_blocks:
-                code_str = code.strip()
-                if "import " in code_str or "class " in code_str or "def " in code_str:
-                    return code_str
-            return code_blocks[0].strip()
-            
-        # 2. Fallback: If no markdown blocks, try to strip the initial <think> block cleanly
-        # We require </think> to be followed by spaces and a newline to avoid matching `</think>` inside Python string literals.
+        # 2. Si pas de bloc fermé, on cherche le premier bloc et on prend tout jusqu'à la fin 
+        match_open = re.search(r"```(?:python)?\s*\n(.*)", response, re.DOTALL | re.IGNORECASE)
+        if match_open:
+            return match_open.group(1).strip()
+
+        # 3. Fallback : si pas de backticks, on nettoie les reflexions <think>
         cleaned = re.sub(r"^\s*<think>.*?</think>\s*(?:\n|$)", "", response, flags=re.DOTALL)
-        
-        # If the LLM forgot to output </think>, the <think> tag will still be at the beginning of `cleaned`.
         if cleaned.strip().startswith("<think>"):
-            # We skip the reasoning text by finding the first standard Python preamble
             match = re.search(r"^(?:import|from|class|def)\s+[a-zA-Z_]", cleaned, flags=re.MULTILINE)
             if match:
                 cleaned = cleaned[match.start():]
             else:
-                # Just remove the opening tag as a last resort
                 cleaned = re.sub(r"^\s*<think>\s*", "", cleaned)
                 
         if "import " in cleaned or "class " in cleaned or "def " in cleaned:
-             return cleaned.strip()
+            return cleaned.strip()
 
         return None
 
@@ -270,7 +409,6 @@ class SelfImprovementManager:
         """
         log("Début du tournoi A/B entre V_Current et V_Next...", category="Tournoi")
         
-        # Fallback DNA if not provided
         role_prompt = best_dna.role_prompt if best_dna else "Tu es un assistant logique. Résous ces équations calmement."
         temp = best_dna.temperature if best_dna else 0.3
         
@@ -298,7 +436,11 @@ async def run_benchmark():
     try:
         load_dotenv(override=True)
         llm = LLMService()
-        env = LogicEnvironment()
+        env = LogicEnvironment(fitness_settings={{
+            "time_penalty_factor": 0.0001,
+            "token_penalty_factor": 0.0001, 
+            "success_threshold": 0.95
+        }})
         task = env.get_benchmark_task()
         
         base_dna = AgentDNA(
@@ -308,7 +450,6 @@ async def run_benchmark():
             temperature={temp}
         )
         
-        # 3 agents en parallèle pour robustesse
         agents = [BaseAgent(dna=replace(base_dna, uid=uuid.uuid4()), llm_service=llm) for _ in range(3)]
         
         start_time = time.perf_counter()
@@ -344,7 +485,6 @@ if __name__ == "__main__":
         results = {}
         timeout_val = 600
         
-        # Helper pour lancer un processus asynchrone
         async def run_proc(cmd, cwd):
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -363,7 +503,6 @@ if __name__ == "__main__":
                 return "", "Timeout", 1
 
         try:
-            # RUN V_CURRENT
             stdout, stderr, returncode = await run_proc([sys.executable, str(self.base_dir / "launcher_current.py")], self.base_dir)
             lines = [l.strip() for l in stdout.split("\n") if "," in l]
             if returncode == 0 and lines:
@@ -377,7 +516,6 @@ if __name__ == "__main__":
             results["v_current"] = {"fitness": 0.0, "time": 999.0, "tokens": 9999}
             
         try:
-            # RUN V_NEXT
             stdout, stderr, returncode = await run_proc([sys.executable, str(self.sandbox_dir / "launcher.py")], self.sandbox_dir)
             lines = [l.strip() for l in stdout.split("\n") if "," in l]
             if returncode == 0 and lines:
@@ -404,33 +542,30 @@ if __name__ == "__main__":
         
         log(f"V1 Score: {v_cur['fitness']*100:.0f}%. V2 Score: {v_next['fitness']*100:.0f}%", category="Tournoi")
         
-        # Ensure the baseline (v_cur) did not crash (indicated by time == 999.0 or fitness 0.0)
         baseline_crashed = v_cur["time"] >= 999.0 or (v_cur["fitness"] <= 0.0 and v_cur["tokens"] >= 9999)
         
-        # Condition de victoire : Fitness strictement supérieure ET la baseline n'a pas planté
         if v_next["fitness"] > v_cur["fitness"] and v_next["fitness"] > 0 and not baseline_crashed:
             self.version += 1
             self._save_version()
             log(f"V2 Score: {v_next['fitness']*100:.0f}%. Remplacement des fichiers sources. Meta-MAS passe en version {self.version}.", category="Tournoi")
-            # Remplacement
             for file in (self.sandbox_dir / "core").iterdir():
                 if file.is_file() and file.name.endswith(".py"):
                     shutil.copy(file, self.core_dir / file.name)
             
-            # Générer le rapport de mise à jour
             self._generate_report(modification, results)
             
-            # Nettoyage
             shutil.rmtree(self.sandbox_dir, ignore_errors=True)
             return True
         else:
             log("Déploiement annulé. Rollback effectué vers V1.", category="Tournoi")
-            # Rollback
             shutil.rmtree(self.sandbox_dir, ignore_errors=True)
             return False
 
-    async def run_meta_evolution_cycle(self, current_dna: AgentDNA | None = None):
-        modification = await self.reflect_on_architecture()
+    async def run_meta_evolution_cycle(self, current_dna: AgentDNA | None = None, failed_context: str = ""):
+        """
+        Execute un cycle d'évolution méta avec contexte d'échec pour amélioration ciblée.
+        """
+        modification = await self.reflect_on_architecture(failed_questions_context=failed_context)
         if not modification:
             return
             

@@ -1,12 +1,14 @@
 import json
 import re
+import statistics
 import uuid
+import asyncio
 from dataclasses import replace
 from pathlib import Path
 from typing import List
 
 from models.dna import AgentDNA
-from core.agent import BaseAgent
+from core.agent import BaseAgent, compute_prompt_fitness
 from core.environment import LogicEnvironment
 from services.llm_client import LLMService
 from core.memory import EvolutionGraph
@@ -25,6 +27,7 @@ class MetaMAS:
         self.budget = sim_settings.get("initial_budget", 4000.0)
         self.base_cost = 10.0
         self.best_scores_history = []
+        self.failed_questions_history = []  # Historique des questions échouées
         self._load_identity()
         
     def _load_identity(self):
@@ -48,12 +51,16 @@ class MetaMAS:
         
         if len(self.best_scores_history) >= stagnation_limit:
             recent = self.best_scores_history[-stagnation_limit:]
-            if len(set(recent)) == 1:             # stagnation réelle
-                trend_factor = 1.5        # +50% : explorer plus largement
-            elif recent[-1] > recent[0]:          # progrès
-                trend_factor = 0.6        # -40% : économiser
+            # Calcul de variance avec tolérance aux micro-variations
+            variance = statistics.variance(recent) if len(recent) > 1 else 0.0
+            variance_threshold = 0.0005  # Seuil de variance significatif
+            
+            if variance < variance_threshold:    # stagnation (scores quasi-identiques)
+                trend_factor = 1.5                # +50% : explorer plus largement
+            elif recent[-1] > recent[0] + 0.01:   # progrès réel (> 0.01)
+                trend_factor = 0.6                # -40% : économiser
             else:
-                trend_factor = 1.0        # stable
+                trend_factor = 1.0                # stable
 
         dynamic_count = int(count * budget_ratio * trend_factor)
         
@@ -79,66 +86,99 @@ class MetaMAS:
 
         return agents
 
-    async def mutate_dna(self, dna: AgentDNA) -> AgentDNA:
+    async def mutate_dna(self, dna: AgentDNA, env: LogicEnvironment = None) -> AgentDNA:
+        # Collecter les questions systématiquement échouées
+        if env is None:
+            env = LogicEnvironment()
+            
+        failed_questions = []
+        expected = env.EXPECTED_ANSWERS
+        for q_label in expected.keys():
+            # Si cette question a été régulièrement échouée dans l'historique
+            if any(q_label in failed_batch for failed_batch in self.failed_questions_history):
+                failed_questions.append(q_label)
+        
+        # Construire le contexte d'erreurs pour le prompt
+        error_context = ""
+        if failed_questions:
+            error_context = f"\n\n--- INFORMATIONS CRITIQUES ---\nCes questions ont été SYSTÉMATIQUEMENT échouées : {', '.join(failed_questions)}.\nLe nouveau prompt doit IMPÉRATIVEMENT trouver une approche DIFFERENTE pour ces questions spécifiques."
+        
         system_prompt = (
             "Tu es l'Architecte Primordial. Analyse ce prompt d'agent qui a échoué "
             "à une tâche logique comportant 25 problèmes distincts.\n"
             "MISSION : Produis une version améliorée, plus rigoureuse et concise "
             "de ce prompt pour maximiser les chances de réussite.\n"
-            "RÈGLE CRITIQUE : Ton nouveau prompt DOIT explicitement mentionner qu'il y a 25 PROBLÈMES à résoudre (Q1 à Q25) "
-            "et qu'il faut répondre au format exact 'Qx: [nombre]'."
+            "CONTRAINTES :\n"
+            "1. Le prompt doit être en FRANÇAIS.\n"
+            "2. DOIT mentionner explicitement les 25 PROBLÈMES (Q1 à Q25).\n"
+            "3. DOIT exiger un raisonnement étape par étape (Chain of Thought) avant chaque réponse.\n"
+            "4. DOIT exiger le format final 'Qx: [nombre]' pour l'évaluation.\n"
+            "5. Supprime les fioritures inutiles (poèmes, etc.) qui gaspillent des tokens."
         )
-        base_user_prompt = f"Voici le prompt actuel qui a échoué (Fitness = 0.0) :\n{dna.role_prompt}\n\nGénère uniquement le nouveau prompt, sans aucune introduction, conclusion ou balise de code."
+        base_user_prompt = f"Voici le prompt actuel qui a échoué (Fitness = 0.0) :\n{dna.role_prompt}\n\nGénère uniquement le nouveau prompt, sans aucune introduction, conclusion ou balise de code.{error_context}"
 
         
-        max_retries = 3
-        new_role_prompt = dna.role_prompt
+        max_parallel = 3
         
-        for attempt in range(max_retries):
-            user_prompt = base_user_prompt
-            if attempt > 0:
-                user_prompt += "\n\nATTENTION : Tes précédentes propositions étaient trop similaires à des approches ayant déjà échoué. Propose une approche RADICALEMENT DIFFÉRENTE."
-                
-            # We assume generate_response takes a list of messages
-            messages = [
+        async def attempt_mutation(idx: int) -> str:
+            # Calcul de température adaptative
+            if len(self.best_scores_history) >= 3:
+                recent_scores = self.best_scores_history[-3:]
+                std = statistics.stdev(recent_scores) if len(recent_scores) > 1 else 0.0
+                base_temp = 0.9 if std < 0.05 else 0.4
+            else:
+                base_temp = 0.7
+            
+            curr_temp = min(1.2, base_temp + (idx * 0.1))
+            
+            msg = [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": base_user_prompt + (f"\n\nNote: Variante {idx+1}. Propose une approche originale." if idx > 0 else "")}
             ]
-            response = await self.llm_service.generate_response(
-                model="MiniMax-M2.5",
-                messages=messages,
-                temperature=0.7 + (attempt * 0.1)
-            )
             
-            if response is not None:
-                # Strip <think>...</think> blocks cleanly
-                cleaned = re.sub(r"^\s*<think>.*?</think>\s*(?:\n|$)", "", response, flags=re.DOTALL)
-                
-                # If LLM didn't close <think>, try to find end of think by looking for typical prompt start like "Tu " or "Vous "
-                if cleaned.strip().startswith("<think>"):
-                   match = re.search(r"\n\s*(Tu |Vous |Voici |Le )", cleaned)
-                   if match:
-                       cleaned = cleaned[match.start():]
-                   else:
-                       cleaned = re.sub(r"^\s*<think>\s*", "", cleaned)
-                
-                cleaned = cleaned.strip()
-                # Also strip markdown code fences if present
-                if cleaned.startswith("```"):
-                    cleaned = re.sub(r"```\w*\n?", "", cleaned)
-                    cleaned = re.sub(r"```$", "", cleaned.strip()).strip()
-                new_role_prompt = cleaned if cleaned else dna.role_prompt
-                
-            if not self.memory.is_regression(new_role_prompt):
-                break
-            log(f"Tentative de mutation {attempt+1}/{max_retries} rejetée : régression détectée (RETRY).", category="Meta-MAS")
+            res = await self.llm_service.generate_response(model="MiniMax-M2.5", messages=msg, temperature=curr_temp)
+            if not res: return ""
+            
+            # Nettoyage robuste (identique à agent.py en esprit)
+            cl = re.sub(r"^\s*<think>.*?</think>\s*(?:\n|$)", "", res, flags=re.DOTALL)
+            if cl.strip().startswith("<think>"):
+                m = re.search(r"\n\s*(Tu |Vous |Voici |Le |MISSION)", cl)
+                if m: cl = cl[m.start():]
+                else: cl = re.sub(r"^\s*<think>\s*", "", cl)
+            
+            cl = cl.strip()
+            if cl.startswith("```"):
+                cl = re.sub(r"```\w*\n?", "", cl)
+                cl = re.sub(r"```$", "", cl.strip()).strip()
+            
+            return cl
 
-            
+        log(f"Lancement de {max_parallel} tentatives de mutation en parallèle...", category="Meta-MAS")
+        tasks = [attempt_mutation(i) for i in range(max_parallel)]
+        mutated_prompts = await asyncio.gather(*tasks)
+        
+        # --- Sélection par Fitness Structurelle (v38+) ---
+        candidates = [c for c in mutated_prompts if c and not self.memory.is_regression(c)]
+        
+        final_prompt = dna.role_prompt
+        if candidates:
+            # On choisit le mutant qui a la meilleure structure (instructions, exemples, longueur)
+            candidates.sort(key=lambda p: compute_prompt_fitness(p, dna.role_prompt), reverse=True)
+            final_prompt = candidates[0]
+            score_struct = compute_prompt_fitness(final_prompt, dna.role_prompt)
+            log(f"Meilleure mutation sélectionnée (Qualité Structurelle: {score_struct:.2f})", category="Meta-MAS")
+        else:
+            # Fallback si toutes sont des régressions ou vides
+            for candidate in mutated_prompts:
+                 if candidate: 
+                     final_prompt = candidate
+                     break
+
         new_dna = replace(
             dna,
             uid=uuid.uuid4(),
             generation=dna.generation + 1,
-            role_prompt=new_role_prompt
+            role_prompt=final_prompt
         )
         
         self.memory.add_mutation(str(dna.uid), new_dna)
@@ -149,16 +189,25 @@ class MetaMAS:
         
         best_score = -1.0
         best_agent_id = None
+        best_response = None
         
         # Deduct the base cost of running a generation
         self.budget -= self.base_cost
         
-        for agent_id, result_dict in generation_results.items():
-            if result_dict is None:
-                score = 0.0
-            else:
-                score = await env.evaluate(result_dict)
-                # Deduct dynamic cost based on actual execution time and tokens
+        # --- Évaluation Parallèle (v37) ---
+        agent_items = list(generation_results.items())
+        
+        async def eval_one(agent_id, res_dict):
+            if res_dict is None: return agent_id, 0.0, None
+            score = await env.evaluate(res_dict)
+            return agent_id, score, res_dict
+
+        eval_tasks = [eval_one(aid, rd) for aid, rd in agent_items]
+        evaluated_results = await asyncio.gather(*eval_tasks)
+
+        for agent_id, score, result_dict in evaluated_results:
+            if result_dict:
+                # Déduction des coûts (Time & Tokens)
                 time_cost = result_dict.get("time", 0.0) * 0.005
                 token_cost = result_dict.get("tokens", 0) * 0.0001
                 self.budget -= (time_cost + token_cost)
@@ -166,7 +215,23 @@ class MetaMAS:
             if score > best_score:
                 best_score = score
                 best_agent_id = agent_id
-                
+                best_response = result_dict
+        
+        # Collecter les questions échouées pour l'historique
+        if best_response is not None:
+            agent_response = best_response.get("result", "")
+            current_failed = []
+            for q_label, expected in env.EXPECTED_ANSWERS.items():
+                pattern = rf"{q_label}\s*:\s*{re.escape(expected)}\b"
+                if not re.search(pattern, agent_response):
+                    current_failed.append(q_label)
+            
+            if current_failed:
+                self.failed_questions_history.append(set(current_failed))
+                # Garder seulement les 3 derniers historiques
+                if len(self.failed_questions_history) > 3:
+                    self.failed_questions_history.pop(0)
+        
         self.memory.add_node(current_dna, best_score)
         
         # Tracking stagnation
@@ -179,6 +244,7 @@ class MetaMAS:
             log("Stagnation détectée sur 3 générations ! Déclenchement de la Méta-Mutation...", category="Meta-MAS")
             await self.meta_mutation()
             self.best_scores_history.clear()
+            self.failed_questions_history.clear()  # Reset aussi l'historique des erreurs
             
         # For our simple loop, if any agent achieves close to perfect score, we return it.
         # Since fitness can be lower than 1.0 due to time/token penalties, we use a generous threshold.
@@ -190,7 +256,7 @@ class MetaMAS:
             
         # If no one succeeded, we mutate the DNA to create the next generation
         log(f"Meilleur score: {best_score:.3f}. Mutation en cours de l'ADN...", category="Meta-MAS")
-        new_dna = await self.mutate_dna(current_dna)
+        new_dna = await self.mutate_dna(current_dna, env)
         return new_dna
 
     async def meta_mutation(self) -> None:
@@ -258,4 +324,3 @@ class MetaMAS:
                 log(f"Échec de la méta-mutation (parse error) : {e}", category="ERROR")
                 
         log("La méta-mutation n'a pas produit de changement valide.", category="Meta-MAS")
-

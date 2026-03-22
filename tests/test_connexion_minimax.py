@@ -12,7 +12,7 @@ print("OPENAI_API_KEY =", os.getenv("OPENAI_API_KEY"))
 client = OpenAI()
 
 resp = client.chat.completions.create(
-    model="MiniMax-M2.5",
+    model="MiniMax-M2.7",
     messages=[
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": "Test message"}
